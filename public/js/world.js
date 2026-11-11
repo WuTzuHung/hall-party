@@ -781,36 +781,49 @@ function cocktail(scene, x, z) {
 
 // 沉浸式投影：程序化彩繪玻璃花卉（像附圖第二張）
 function projectionMaterial() {
+  // 細緻的第凡內風格彩繪玻璃花卉：小玻璃格、細鉛條、多朵花與藤蔓，緩慢呼吸變化
   return new THREE.ShaderMaterial({
     uniforms: { uTime: { value: 0 } },
-    vertexShader: `varying vec2 vUv; varying vec3 vW; void main(){ vUv=uv; vW=(modelMatrix*vec4(position,1.)).xyz; gl_Position=projectionMatrix*viewMatrix*vec4(vW,1.);} `,
-    fragmentShader: `uniform float uTime; varying vec2 vUv; varying vec3 vW;
+    vertexShader: `varying vec3 vW; void main(){ vW=(modelMatrix*vec4(position,1.)).xyz; gl_Position=projectionMatrix*viewMatrix*vec4(vW,1.);} `,
+    fragmentShader: `uniform float uTime; varying vec3 vW;
       vec2 h2(vec2 p){ p=vec2(dot(p,vec2(127.1,311.7)),dot(p,vec2(269.5,183.3))); return fract(sin(p)*43758.5453); }
-      vec3 pal(float t){ return 0.5+0.5*cos(6.2831*(vec3(0.9,0.7,0.5)*t+vec3(0.0,0.25,0.55))); }
+      float h1(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); }
+      vec3 voro(vec2 p){ vec2 ip=floor(p), fp=fract(p); float d1=8., d2=8.; vec2 cid=vec2(0);
+        for(int j=-1;j<=1;j++) for(int i=-1;i<=1;i++){ vec2 g=vec2(i,j); vec2 o=0.5+0.42*sin(6.2831*h2(ip+g)); vec2 r=g+o-fp; float d=dot(r,r); if(d<d1){d2=d1;d1=d;cid=ip+g;} else if(d<d2){d2=d;} }
+        return vec3(sqrt(d2)-sqrt(d1), cid); }
+      float flower(vec2 q, vec2 c, float R, float n, float rot){ vec2 d=q-c; float r=length(d); float a=atan(d.y,d.x)+rot;
+        float pr = R*(0.62+0.38*abs(cos(a*n*0.5))); return smoothstep(0.04,0.0, r-pr); }
       void main(){
-        vec2 p = vec2(vW.z, vW.y) * 0.85 + vec2(uTime*0.05, 0.0);
-        // Voronoi 玻璃格
-        vec2 ip=floor(p), fp=fract(p); float d1=8., d2=8.; vec2 cid=vec2(0);
-        for(int j=-1;j<=1;j++) for(int i=-1;i<=1;i++){ vec2 g=vec2(i,j); vec2 o=h2(ip+g); o=0.5+0.4*sin(uTime*0.3+6.2831*o); vec2 r=g+o-fp; float d=dot(r,r); if(d<d1){d2=d1;d1=d;cid=ip+g;} else if(d<d2){d2=d;} }
-        float edge = smoothstep(0.0,0.06, sqrt(d2)-sqrt(d1));
-        // 大型花朵
-        vec2 fc = vec2(vW.z, vW.y);
-        float cycle = floor(uTime/20.0);
-        vec2 c1 = vec2(-32.0 + sin(uTime*0.07)*14.0, 7.0); float r = length(fc-c1); float a = atan(fc.y-c1.y, fc.x-c1.x);
-        float petal = smoothstep(0.3,0.0, abs(r - 4.0 - 1.4*sin(a*7.0+uTime*0.2)) -1.2);
-        vec2 c2 = vec2(-20.0 + cos(uTime*0.05)*16.0, 4.0); float r2 = length(fc-c2); float a2 = atan(fc.y-c2.y, fc.x-c2.x);
-        float petal2 = smoothstep(0.3,0.0, abs(r2 - 3.0 - 1.0*sin(a2*5.0-uTime*0.3)) -0.9);
-        float stem = smoothstep(0.35,0.0, abs(fc.x - c1.x - sin(fc.y*0.4)*1.5)) * step(fc.y, c1.y-3.0);
-        float hcell = h2(cid).x;
-        vec3 base = mix(vec3(0.10,0.35,0.55), vec3(0.18,0.55,0.25), smoothstep(-0.2,1.2, sin(vW.y*0.3+vW.z*0.08+uTime*0.1)));
-        base = mix(base, pal(hcell*0.6+uTime*0.01), 0.35);
-        vec3 col = base;
-        col = mix(col, mix(vec3(1.0,0.85,0.35), vec3(0.95,0.95,0.8), hcell), petal);
-        col = mix(col, mix(vec3(0.95,0.3,0.4), vec3(1.0,0.6,0.5), hcell), petal2);
-        col = mix(col, vec3(0.2,0.6,0.25), stem*0.8);
-        col *= 0.35 + 0.65*edge;
-        float fade = 0.75 + 0.25*sin(uTime*0.15 + cycle);
-        col = pow(col, vec3(1.25)); gl_FragColor = vec4(col*fade*0.95, 1.0);
+        float t = uTime*0.12;
+        vec2 q = vec2(vW.z, vW.y);
+        vec3 v = voro(q*2.4);
+        float lead = smoothstep(0.015,0.07, v.x);
+        float hc = h1(v.yz);
+        // 背景：上方天空藍到下方葉綠
+        vec3 sky = mix(vec3(0.28,0.46,0.72), vec3(0.55,0.72,0.86), hc);
+        vec3 leaf = mix(vec3(0.16,0.42,0.22), vec3(0.42,0.62,0.30), hc);
+        float hy = smoothstep(2.0,8.0, vW.y + sin(vW.z*0.35+t)*1.2);
+        vec3 col = mix(leaf, sky, hy);
+        // 藤蔓
+        float vine = smoothstep(0.18,0.0, abs(vW.y - 3.0 - sin(vW.z*0.45)*1.6));
+        col = mix(col, vec3(0.20,0.50,0.22), vine);
+        // 重複排列的花朵（大小交錯）
+        vec2 cell = vec2(floor((q.x+2.0)/7.0), 0.0);
+        float fx = cell.x*7.0 + 1.5 + sin(cell.x*3.1)*1.2;
+        float fy = 4.2 + sin(cell.x*1.7)*1.5 + (vW.y>7.0 ? 6.5 : 0.0);
+        float rot = t*0.6 + cell.x;
+        float f1 = flower(q, vec2(fx, fy), 1.5, 10.0, rot);
+        float f1c = flower(q, vec2(fx, fy), 0.55, 6.0, -rot);
+        float f2 = flower(q, vec2(fx+3.5, fy-1.6+sin(cell.x)*0.8), 0.9, 8.0, -rot*0.7);
+        vec3 petalA = mix(vec3(0.98,0.80,0.36), vec3(1.0,0.93,0.70), hc);
+        vec3 petalB = mix(vec3(0.88,0.36,0.46), vec3(0.98,0.62,0.62), hc);
+        col = mix(col, petalA, f1);
+        col = mix(col, vec3(0.86,0.45,0.15), f1c);
+        col = mix(col, petalB, f2);
+        // 光線緩慢掃過
+        float sweep = 0.75 + 0.25*sin(vW.z*0.12 - uTime*0.25);
+        col *= (0.28 + 0.72*lead) * sweep;
+        gl_FragColor = vec4(col*0.9, 1.0);
         #include <colorspace_fragment>
       }`,
   });
