@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { buildWorld, SPAWN, HALL } from './world.js';
+import { buildWorld, SPAWN, HALL, SCREEN } from './world.js';
 import { Avatar } from './avatar.js';
 import { BigScreen } from './screen.js';
 
@@ -42,6 +42,8 @@ const me = {
 };
 const cam = { yaw: 0, pitch: 0.18, dist: 5.5, targetDist: 5.5, minD: 0, maxD: 14 };
 const keys = {};
+// 觀看模式：normal 一般 / seat 座位第一人稱 / best 正中央最佳視角 / full 螢幕放到最大
+let viewMode = 'normal'; let bestD = 17; let savedSeatCam = null;
 let joy = { active: false, x: 0, y: 0, id: null };
 let entered = false;
 
@@ -112,10 +114,14 @@ canvas.addEventListener('pointermove', (e) => {
   if (pointers.size === 2) {
     p.x = e.clientX; p.y = e.clientY;
     const [a, b] = [...pointers.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y);
-    if (pinchD) cam.targetDist = THREE.MathUtils.clamp(cam.targetDist * (pinchD / d), cam.minD, cam.maxD);
+    if (pinchD) {
+      if (viewMode === 'best') bestD = THREE.MathUtils.clamp(bestD * (pinchD / d), 6, 42);
+      else if (viewMode !== 'full') cam.targetDist = THREE.MathUtils.clamp(cam.targetDist * (pinchD / d), cam.minD, cam.maxD);
+    }
     pinchD = d; return;
   }
   const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
+  if (viewMode === 'best' || viewMode === 'full') return;
   const k = isTouch ? 0.006 : 0.0045;
   cam.yaw -= dx * k; cam.pitch = THREE.MathUtils.clamp(cam.pitch + dy * k, -1.2, 1.35);
 });
@@ -127,6 +133,8 @@ canvas.addEventListener('pointerup', endPointer); canvas.addEventListener('point
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
   const f = Math.exp(e.deltaY * 0.0012);
+  if (viewMode === 'best') { bestD = THREE.MathUtils.clamp(bestD * f, 6, 42); return; }
+  if (viewMode === 'full') return;
   cam.targetDist = cam.targetDist < 0.3 && e.deltaY > 0 ? 0.8 : THREE.MathUtils.clamp(cam.targetDist * f, cam.minD, cam.maxD);
   if (cam.targetDist < 0.45 && e.deltaY < 0) cam.targetDist = 0;
 }, { passive: false });
@@ -151,16 +159,54 @@ function toggleSit() {
   if (me.seat) { standUp(); return; }
   const s = nearSeat || findSeat(); if (!s) return;
   me.seat = s; me.pos.set(s.x, s.y - 0.5, s.z); me.ry = s.ry; me.speed = 0;
-  cam.yaw = s.ry + Math.PI; // 看向椅子面對的方向
-  $('#btn-sit').textContent = '站起來'; toast('已坐下 · 再按一次 E 或移動就會站起來');
+  seatView();
+  $('#btn-sit').textContent = '站起來'; toast('已坐下 · 可用下方按鈕切換最佳視角或全螢幕');
+  $('#seat-tools').classList.remove('hidden'); setMode('seat');
   sendNow();
 }
 function standUp() {
   const s = me.seat; me.seat = null;
+  setMode('normal'); $('#seat-tools').classList.add('hidden');
+  cam.dist = cam.targetDist = 5; cam.pitch = 0.18;
   me.pos.x -= Math.sin(s.ry) * 0.6; me.pos.z -= Math.cos(s.ry) * 0.6;
   $('#btn-sit').textContent = '坐下'; sendNow();
 }
 $('#btn-sit').addEventListener('click', (e) => { e.stopPropagation(); toggleSit(); });
+
+// 坐下時：第一人稱，從座位的眼睛高度看向大螢幕中央
+function seatView() {
+  const ex = me.pos.x, ey = me.pos.y + 1.25, ez = me.pos.z;
+  const lx = SCREEN.x - ex, ly = SCREEN.y - ey, lz = SCREEN.z - ez; const l = Math.hypot(lx, ly, lz);
+  cam.pitch = Math.asin(-ly / l); cam.yaw = Math.atan2(-lx, -lz);
+  cam.dist = cam.targetDist = 0;
+}
+function setMode(m) {
+  viewMode = m;
+  $('#btn-best').textContent = m === 'best' ? '✕ 取消最佳視角' : '🎯 最佳視角';
+  $('#btn-best').classList.toggle('on', m === 'best');
+  document.body.classList.toggle('mode-full', m === 'full');
+  $('#full-exit').classList.toggle('hidden', m !== 'full');
+}
+$('#btn-best').addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (viewMode === 'best') { setMode('seat'); seatView(); toast('回到座位視角'); }
+  else { setMode('best'); toast('最佳視角 · 用滑鼠滾輪或雙指往前、往後拉'); }
+});
+$('#btn-watchfull').addEventListener('click', (e) => { e.stopPropagation(); enterFull(); });
+$('#full-exit').addEventListener('click', (e) => { e.stopPropagation(); exitFull(); });
+let modeBeforeFull = 'seat';
+function enterFull() {
+  modeBeforeFull = viewMode === 'full' ? modeBeforeFull : viewMode;
+  setMode('full');
+  try { if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => { }); } catch (_) { }
+}
+function exitFull() {
+  if (viewMode !== 'full') return;
+  setMode(modeBeforeFull); if (modeBeforeFull === 'seat') seatView();
+  try { if (document.fullscreenElement) document.exitFullscreen(); } catch (_) { }
+}
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && viewMode === 'full') exitFull(); });
+addEventListener('keydown', (e) => { if (e.code === 'Escape') exitFull(); });
 
 // ---------- UI ----------
 let toastT;
@@ -281,7 +327,7 @@ function updateMe(dt) {
   if (keys.KeyA || keys.ArrowLeft) ix -= 1; if (keys.KeyD || keys.ArrowRight) ix += 1;
   if (joy.active) { ix += joy.x; iz += joy.y; }
   const il = Math.hypot(ix, iz);
-  if (me.seat) { if (il > 0.3) standUp(); else { me.speed = 0; return; } }
+  if (me.seat) { if (il > 0.3 && (viewMode === 'seat' || viewMode === 'normal')) standUp(); else { me.speed = 0; return; } }
   const run = keys.ShiftLeft || keys.ShiftRight || (joy.active && il > 0.95);
   let sp = 0;
   if (il > 0.05) {
@@ -301,10 +347,27 @@ function updateMe(dt) {
   else { me.pos.y += (g - me.pos.y) * Math.min(1, dt * 18); me.vy = 0; }
 }
 
+const fullPos = new THREE.Vector3(), bestPos = new THREE.Vector3();
 function updateCamera(dt) {
+  if (viewMode === 'best' || viewMode === 'full') {
+    let d;
+    if (viewMode === 'full') {
+      const t = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+      d = Math.max((SCREEN.h / 2) / t, (SCREEN.w / 2) / (t * camera.aspect)) * 1.0;
+    } else d = bestD;
+    const target = (viewMode === 'full' ? fullPos : bestPos).set(SCREEN.x, SCREEN.y, SCREEN.z + d);
+    const k = viewMode === 'full' ? 1 : Math.min(1, dt * 6);
+    camera.position.lerp(target, k);
+    camera.quaternion.slerp(new THREE.Quaternion(), k); // 正對 -z，完全水平
+    const hide = viewMode === 'full';
+    if (me.avatar) me.avatar.root.visible = !hide && camera.position.distanceTo(me.avatar.root.position) > 1.2;
+    for (const r of remotes.values()) r.av.root.visible = !hide;
+    return;
+  }
+  for (const r of remotes.values()) r.av.root.visible = true;
   cam.dist += (cam.targetDist - cam.dist) * Math.min(1, dt * 8);
   const fp = cam.dist < 0.35;
-  const eye = me.seat ? 1.05 : 1.32;
+  const eye = me.seat ? 1.25 : 1.32;
   camTarget.set(me.pos.x, me.pos.y + eye + (fp ? 0.0 : 0.1), me.pos.z);
   dirV.set(Math.sin(cam.yaw) * Math.cos(cam.pitch), Math.sin(cam.pitch), Math.cos(cam.yaw) * Math.cos(cam.pitch));
   let d = Math.max(cam.dist, 0.001);

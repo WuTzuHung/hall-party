@@ -641,8 +641,9 @@ function buildInterior(scene, anim, q, renderer) {
     const x = -6 + i, z = -47.6 - r * 1.25;
     chair(x, 0, z, 0, true);
   }
-  for (const s of [-1, 1]) for (let r = 0; r < 2; r++) for (let i = 0; i < 5; i++) {
-    chair(s * (9.4 + i * 0.95), 7, -49 - r * 1.3, 0, true);
+  // 二樓迴廊：兩排椅子沿著欄杆排列，面向中間大廳（左側朝右、右側朝左）
+  for (const s of [-1, 1]) for (let c = 0; c < 2; c++) for (let z = -26.8; z > -56.8; z -= 1.1) {
+    chair(s * (8.6 + c * 1.2), 7, z, s * Math.PI / 2, true);
   }
   // 側廊的雞尾酒桌
   for (const s of [-1, 1]) for (const z of [-14, -21]) cocktail(scene, s * 11, z);
