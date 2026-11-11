@@ -391,4 +391,4 @@ addEventListener('resize', () => {
 status('');
 requestAnimationFrame(frame);
 setTimeout(() => $('#loading-veil').classList.add('gone'), 100);
-window.__hall = { me, cam, camera, scene, world, remotes, toggleSit };
+window.__hall = { me, cam, camera, scene, world, remotes, toggleSit, collide, groundAt };

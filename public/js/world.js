@@ -283,8 +283,8 @@ function buildFacade(scene, anim, q) {
   const COLS = [-21, -15, -9, -3, 3, 9, 15, 21];
   // 花崗岩基座
   box(-30.3, 0, -0.2, -2.7, 0.7, 0.35, 'granite'); box(2.7, 0, -0.2, 30.3, 0.7, 0.35, 'granite');
-  walls.push({ x0: -30.5, x1: -1.5, z0: -60, z1: 0.35, y0: -1, y1: 50 });
-  walls.push({ x0: 1.5, x1: 30.5, z0: -60, z1: 0.35, y0: -1, y1: 50 });
+  walls.push({ x0: -30.5, x1: -1.5, z0: -1.5, z1: 0.35, y0: -1, y1: 50 });
+  walls.push({ x0: 1.5, x1: 30.5, z0: -1.5, z1: 0.35, y0: -1, y1: 50 });
   camBlock.push({ x0: -30.5, x1: -1.5, z0: -1.5, z1: 0.0, y0: 0, y1: 48 }, { x0: 1.5, x1: 30.5, z0: -1.5, z1: 0.0, y0: 0, y1: 48 }, { x0: -1.5, x1: 1.5, z0: -1.5, z1: 0, y0: 4.6, y1: 48 });
 
   // 窗間牆（柱後）
@@ -514,7 +514,7 @@ function buildInterior(scene, anim, q, renderer) {
 
   // 入口平台與往下的大階梯
   box(-7, 0, -10, 7, 1.2, -6.5, 'marble', true);
-  floors.push({ x0: -7, x1: 7, z0: -10, z1: -6.3, y: 1.2 });
+  floors.push({ x0: -7, x1: 7, z0: -10, z1: -6.0, y: 1.2 });
   for (let i = 0; i < 8; i++) {
     const y = 1.2 - (i + 1) * 0.15; const z0 = -10 - (i + 1) * 0.375;
     box(-4, 0, z0, 4, y, -10, 'marble');
