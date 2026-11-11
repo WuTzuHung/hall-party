@@ -553,8 +553,9 @@ function buildInterior(scene, anim, q, renderer) {
     box(Math.min(s * 6.5, s * 6.64), 12.75, -58.2, Math.max(s * 6.5, s * 6.64), 12.9, -6.3, 'gold');
     for (let z = -57.8; z < -6.6; z += 0.32) box(Math.min(s * 6.42, s * 6.6), 13.02, z, Math.max(s * 6.42, s * 6.6), 13.2, z + 0.16, 'plain');
     // 夾層樓面帶
-    box(Math.min(s * 6.7, s * 8.4), 6.6, -58.2, Math.max(s * 6.7, s * 8.4), 7.0, -6.3, 'plain');
-    box(Math.min(s * 6.62, s * 6.76), 6.72, -58.2, Math.max(s * 6.62, s * 6.76), 6.86, -6.3, 'gold');
+    // 只延伸到最後一根方柱，不伸到大螢幕前面
+    box(Math.min(s * 6.7, s * 8.4), 6.6, -54.0, Math.max(s * 6.7, s * 8.4), 7.0, -6.3, 'plain');
+    box(Math.min(s * 6.62, s * 6.76), 6.72, -54.0, Math.max(s * 6.62, s * 6.76), 6.86, -6.3, 'gold');
   }
 
   // 筒形拱頂（藻井）
@@ -579,7 +580,7 @@ function buildInterior(scene, anim, q, renderer) {
     for (let k = 0; k < 28; k++) { const a = k / 28 * Math.PI * 2; const e = new THREE.SphereGeometry(0.09, 6, 4); place(e, { x: Math.cos(a) * 3.18, y: 17.08, z: z + Math.sin(a) * 3.68 }); B.add(e, 'gold'); }
     // 光束（體積光感）
     const beam = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 3.6, 16, 32, 1, true), new THREE.MeshBasicMaterial({ color: 0xffe2b0, transparent: true, opacity: 0.035, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
-    beam.scale.z = 1.15; beam.position.set(0, 9, z); scene.add(beam);
+    beam.scale.z = 1.15; beam.position.set(0, 9, z); if (i < 2) scene.add(beam); // 最靠近螢幕的那道光束不放，避免擋到畫面
   });
 
   // 側廊天花
@@ -588,7 +589,8 @@ function buildInterior(scene, anim, q, renderer) {
   for (const s of [-1, 1]) {
     const xa = s > 0 ? 8.2 : -14, xb = s > 0 ? 14 : -8.2;
     box(s > 0 ? 8.4 : -14, 6.6, -58, s > 0 ? 14 : -8.4, 7.0, -25, 'marble');
-    floors.push({ x0: s > 0 ? 7.2 : -14, x1: s > 0 ? 14 : -7.2, z0: -58, z1: -25, y: 7 });
+    floors.push({ x0: s > 0 ? 7.2 : -14, x1: s > 0 ? 14 : -7.2, z0: -54.0, z1: -25, y: 7 });
+    floors.push({ x0: s > 0 ? 8.4 : -14, x1: s > 0 ? 14 : -8.4, z0: -58, z1: -54.0, y: 7 });
     box(xa, 6.45, -25.1, xb, 6.6, -25, 'gold');
     // 樓梯 40 階
     const sx0 = s > 0 ? 9 : -14, sx1 = s > 0 ? 14 : -9;
@@ -602,8 +604,11 @@ function buildInterior(scene, anim, q, renderer) {
     solidOnly(Math.min(s * 8.2, s * 9), -0.5, -25.6, Math.max(s * 8.2, s * 9), 6.6, -13);
     // 夾層欄杆
     // 欄杆只放在兩根方柱之間，與柱子對齊、不互相穿插
-    const segs = [[-31.14, -25.86], [-38.14, -32.86], [-45.14, -39.86], [-52.14, -46.86], [-58, -53.86]];
+    const segs = [[-31.14, -25.86], [-38.14, -32.86], [-45.14, -39.86], [-52.14, -46.86]];
     for (const [a, b] of segs) balustrade('z', s * 7.5, a, b, 7, s * 7.5, true);
+    // 螢幕旁：迴廊收在最後一根柱子後方，欄杆轉向沿著樓板邊緣
+    balustrade('x', -53.95, Math.min(s * 7.4, s * 8.55), Math.max(s * 7.4, s * 8.55), 7);
+    balustrade('z', s * 8.55, -58, -53.95, 7, s * 8.55);
     // 樓梯頂與方柱之間的缺口，用實心石牆收邊
     box(Math.min(s * 8.2, s * 8.75), 0, -25.7, Math.max(s * 8.2, s * 8.75), 8.05, -24.3, 'marble', true);
   }
@@ -642,7 +647,7 @@ function buildInterior(scene, anim, q, renderer) {
     chair(x, 0, z, 0, true);
   }
   // 二樓迴廊：兩排椅子沿著欄杆排列，面向中間大廳（左側朝右、右側朝左）
-  for (const s of [-1, 1]) for (let c = 0; c < 2; c++) for (let z = -26.8; z > -56.8; z -= 1.1) {
+  for (const s of [-1, 1]) for (let c = 0; c < 2; c++) for (let z = -26.8; z > -53.6; z -= 1.1) {
     chair(s * (8.6 + c * 1.2), 7, z, s * Math.PI / 2, true);
   }
   // 側廊的雞尾酒桌
