@@ -516,8 +516,9 @@ function buildInterior(scene, anim, q, renderer) {
   box(-7, 0, -10, 7, 1.2, -6.5, 'marble', true);
   floors.push({ x0: -7, x1: 7, z0: -10, z1: -6.0, y: 1.2 });
   for (let i = 0; i < 8; i++) {
-    const y = 1.2 - (i + 1) * 0.15; const z0 = -10 - (i + 1) * 0.375;
-    box(-4, 0, z0, 4, y, -10, 'marble');
+    // 每一階只建自己那一段，避免面重疊閃爍；最低一階高 0.15，不與地板同高
+    const y = 1.2 - i * 0.15; const z1 = -10 - i * 0.375, z0 = z1 - 0.375;
+    box(-4, 0, z0, 4, y, z1, 'marble');
   }
   floors.push({ x0: -4, x1: 4, z0: -13, z1: -10, ya: 0, yb: 1.2 });
   solidOnly(-4, 1.2 - 0.5, -10.2, 4, 1.25, -10); // 防止從平台前緣以下穿入
@@ -586,8 +587,8 @@ function buildInterior(scene, anim, q, renderer) {
   // 夾層（二樓迴廊）與通往夾層的樓梯
   for (const s of [-1, 1]) {
     const xa = s > 0 ? 8.2 : -14, xb = s > 0 ? 14 : -8.2;
-    box(xa, 6.6, -58, xb, 7.0, -25, 'marble');
-    floors.push({ x0: xa, x1: xb, z0: -58, z1: -25, y: 7 });
+    box(s > 0 ? 8.4 : -14, 6.6, -58, s > 0 ? 14 : -8.4, 7.0, -25, 'marble');
+    floors.push({ x0: s > 0 ? 7.2 : -14, x1: s > 0 ? 14 : -7.2, z0: -58, z1: -25, y: 7 });
     box(xa, 6.45, -25.1, xb, 6.6, -25, 'gold');
     // 樓梯 40 階
     const sx0 = s > 0 ? 9 : -14, sx1 = s > 0 ? 14 : -9;
@@ -600,8 +601,11 @@ function buildInterior(scene, anim, q, renderer) {
     solidOnly(sx0, -0.5, -25.4, sx1, 6.3, -25.0); // 樓梯下方
     solidOnly(Math.min(s * 8.2, s * 9), -0.5, -25.6, Math.max(s * 8.2, s * 9), 6.6, -13);
     // 夾層欄杆
-    balustrade('z', s * 8.35, -58, -25.6, 7, s * 8.35);
-    balustrade('x', -25.15, Math.min(s * 8.2, s * 8.75), Math.max(s * 8.2, s * 8.75), 7);
+    // 欄杆只放在兩根方柱之間，與柱子對齊、不互相穿插
+    const segs = [[-31.14, -25.86], [-38.14, -32.86], [-45.14, -39.86], [-52.14, -46.86], [-58, -53.86]];
+    for (const [a, b] of segs) balustrade('z', s * 7.5, a, b, 7, s * 7.5, true);
+    // 樓梯頂與方柱之間的缺口，用實心石牆收邊
+    box(Math.min(s * 8.2, s * 8.75), 0, -25.7, Math.max(s * 8.2, s * 8.75), 8.05, -24.3, 'marble', true);
   }
 
   // 大螢幕牆與舞台
@@ -686,7 +690,7 @@ function baluster() {
   }
   return balGeo.clone();
 }
-function balustrade(axis, fixed, a, b, y, cx) {
+function balustrade(axis, fixed, a, b, y, cx, between = false) {
   // axis 'x'：沿 x 從 a 到 b，位於 z=fixed；'z'：沿 z 從 a 到 b，位於 x=fixed
   const len = b - a; const th = 0.3;
   if (axis === 'x') {
@@ -698,7 +702,7 @@ function balustrade(axis, fixed, a, b, y, cx) {
     box(fixed - th / 2, y, a, fixed + th / 2, y + 0.14, b, 'plain');
     box(fixed - th / 2 - 0.03, y + 0.84, a, fixed + th / 2 + 0.03, y + 1.0, b, 'plain');
     for (let z = a + 0.2; z < b - 0.1; z += 0.3) B.add(place(baluster(), { x: fixed, y: y + 0.14, z }), 'plain');
-    for (let z = a; z <= b; z += 4) box(fixed - 0.2, y, z - 0.2, fixed + 0.2, y + 1.05, z + 0.2, 'plain');
+    if (!between) for (let z = a; z <= b; z += 4) box(fixed - 0.2, y, z - 0.2, fixed + 0.2, y + 1.05, z + 0.2, 'plain');
     walls.push({ x0: fixed - 0.2, x1: fixed + 0.2, z0: a, z1: b, y0: y - 0.4, y1: y + 3 });
   }
 }
