@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>光之殿堂 · 管理後台</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#f5eedd;--muted:#bdb3cc;--gold:#e0bd6a;--bg:#0e0a1b;--card:#1a1330;--line:rgba(224,189,106,.3);--ok:#62e39a;--bad:#ff7b8a}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:"Noto Sans TC",system-ui,sans-serif;padding:24px 16px}
+.wrap{max-width:720px;margin:0 auto}
+h1{font:700 22px "Cinzel",serif;letter-spacing:.15em;color:var(--gold);margin:0 0 4px}
+.sub{color:var(--muted);font-size:13px;margin-bottom:20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:16px}
+.card h2{margin:0 0 12px;font-size:16px}
+label{display:block;font-size:13px;color:var(--muted);margin:10px 0 6px}
+input[type=text],input[type=password],input[type=number]{width:100%;padding:11px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:#0f0a1f;color:var(--ink);font-size:15px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button{padding:10px 16px;border-radius:10px;border:1px solid var(--line);background:rgba(224,189,106,.14);color:var(--ink);font-weight:700;cursor:pointer;font-size:14px}
+button.primary{background:linear-gradient(180deg,#f6dc95,#d4a748);color:#1b1206;border:0}
+button:hover{filter:brightness(1.1)}
+.now{display:flex;gap:14px;align-items:center}
+.now img{width:160px;aspect-ratio:16/9;object-fit:cover;border-radius:10px;background:#000}
+.muted{color:var(--muted);font-size:13px}
+#msg{min-height:20px;font-size:14px;margin-top:8px}
+.ok{color:var(--ok)}.bad{color:var(--bad)}
+.stat{font-size:28px;font-weight:700}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.grid div{background:#0f0a1f;border-radius:10px;padding:10px;text-align:center}
+code{background:#0f0a1f;padding:2px 6px;border-radius:6px;font-size:12px;word-break:break-all}
+.hidden{display:none}
+</style>
+</head>
+<body><div class="wrap">
+<h1>HALL DES LUMIÈRES</h1>
+<div class="sub">管理後台 · 只有知道密碼的人才能更換大螢幕影片</div>
+
+<div class="card" id="login">
+  <h2>登入</h2>
+  <label>管理密碼</label>
+  <input type="password" id="pw" placeholder="輸入部署時設定的 ADMIN_PASSWORD" autocomplete="current-password">
+  <div class="row" style="margin-top:12px"><button class="primary" id="btn-login">登入</button></div>
+  <div id="login-msg" class="muted" style="margin-top:8px"></div>
+</div>
+
+<div id="panel" class="hidden">
+  <div class="card">
+    <h2>現場狀態</h2>
+    <div class="grid"><div><div class="stat" id="s-online">0</div><div class="muted">在線</div></div><div><div class="stat" id="s-queue">0</div><div class="muted">排隊</div></div><div><div class="stat" id="s-max">0</div><div class="muted">人數上限</div></div></div>
+  </div>
+  <div class="card">
+    <h2>正在播放</h2>
+    <div class="now"><img id="thumb" alt=""><div><div id="now-title" style="font-weight:700"></div><div class="muted" id="now-info"></div></div></div>
+  </div>
+  <div class="card">
+    <h2>更換大螢幕影片</h2>
+    <label>YouTube 網址（影片或直播都可以）</label>
+    <input type="text" id="url" placeholder="https://www.youtube.com/watch?v=... 或 https://youtu.be/... 或 /live/...">
+    <label>顯示名稱（選填）</label>
+    <input type="text" id="title" placeholder="例如：TL vs GEN 冠軍賽 第一場">
+    <div class="row" style="margin-top:10px">
+      <label style="margin:0;display:flex;gap:6px;align-items:center;color:var(--ink)"><input type="checkbox" id="live"> 這是直播（直播會跟著 YouTube 的即時畫面，不用同步進度）</label>
+    </div>
+    <div class="row" style="margin-top:12px"><button class="primary" id="btn-set">播放到大螢幕</button></div>
+  </div>
+  <div class="card">
+    <h2>播放控制（非直播影片）</h2>
+    <div class="row">
+      <button data-a="play">▶ 播放</button><button data-a="pause">⏸ 暫停</button><button data-a="restart">⟲ 從頭</button>
+      <button data-skip="-10">−10 秒</button><button data-skip="10">+10 秒</button><button data-skip="60">+1 分</button>
+    </div>
+    <label>跳到指定時間（秒或 分:秒）</label>
+    <div class="row"><input type="text" id="seek" style="flex:1" placeholder="例如 754 或 12:34"><button id="btn-seek">跳轉</button></div>
+  </div>
+  <div class="card">
+    <h2>同時在線人數上限</h2>
+    <div class="row"><input type="number" id="max" min="1" max="500" style="flex:1"><button id="btn-max">儲存</button></div>
+    <div class="muted" style="margin-top:8px">建議 60 人。超過上限的人會看到排隊畫面，有人離開就自動進場。</div>
+  </div>
+  <div class="card">
+    <h2>用指令更換（給 Claude 或自動化使用）</h2>
+    <div class="muted">在任何終端機執行：</div>
+    <p><code id="curl"></code></p>
+  </div>
+  <div id="msg"></div>
+</div>
+</div>
+<script>
+const $ = s => document.querySelector(s);
+let pw = sessionStorage.getItem('hall-admin') || '';
+async function api(path, body) {
+  const r = await fetch('/api/admin/' + path, { method: body ? 'POST' : 'GET', headers: { 'Authorization': 'Bearer ' + pw, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || r.status);
+  return j;
+}
+function msg(t, ok = true) { const m = $('#msg'); m.textContent = t; m.className = ok ? 'ok' : 'bad'; }
+function fmt(s) { s = Math.floor(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? h + ':' : '') + String(m).padStart(h ? 2 : 1, '0') + ':' + String(x).padStart(2, '0'); }
+function render(st) {
+  const v = st.video;
+  $('#thumb').src = `https://i.ytimg.com/vi/${v.id}/hqdefault.jpg`;
+  $('#now-title').textContent = v.title || v.id;
+  $('#now-info').textContent = v.live ? '直播中' : `${v.playing ? '播放中' : '已暫停'} · 進度 ${fmt(v.position)}`;
+  if (st.maxUsers) { $('#s-max').textContent = st.maxUsers; if (document.activeElement !== $('#max')) $('#max').value = st.maxUsers; }
+  if (st.online !== undefined) { $('#s-online').textContent = st.online; $('#s-queue').textContent = st.queue; }
+}
+async function refresh() { try { render(await api('state')); } catch (e) { } }
+async function login() {
+  try {
+    const st = await api('state'); sessionStorage.setItem('hall-admin', pw);
+    $('#login').classList.add('hidden'); $('#panel').classList.remove('hidden'); render(st);
+    $('#curl').textContent = `curl -X POST ${location.origin}/api/admin/video -H "Authorization: Bearer <密碼>" -H "Content-Type: application/json" -d '{"url":"https://youtu.be/影片ID","live":false}'`;
+    setInterval(refresh, 3000);
+  } catch (e) { $('#login-msg').textContent = '密碼錯誤或無法連線'; sessionStorage.removeItem('hall-admin'); }
+}
+$('#btn-login').onclick = () => { pw = $('#pw').value; login(); };
+$('#pw').onkeydown = e => { if (e.key === 'Enter') $('#btn-login').click(); };
+$('#btn-set').onclick = async () => {
+  try { const r = await api('video', { url: $('#url').value, live: $('#live').checked, title: $('#title').value }); render({ ...r, video: r.video }); msg('已更新，所有人的大螢幕都會換成這支影片'); }
+  catch (e) { msg('失敗：' + e.message, false); }
+};
+document.querySelectorAll('[data-a]').forEach(b => b.onclick = async () => { try { const r = await api('control', { action: b.dataset.a }); render(r); msg('已送出'); } catch (e) { msg('失敗：' + e.message, false); } });
+document.querySelectorAll('[data-skip]').forEach(b => b.onclick = async () => { try { const r = await api('control', { action: 'skip', seconds: Number(b.dataset.skip) }); render(r); msg('已送出'); } catch (e) { msg('失敗：' + e.message, false); } });
+$('#btn-seek').onclick = async () => {
+  const v = $('#seek').value.trim(); const sec = v.includes(':') ? v.split(':').reduce((a, x) => a * 60 + Number(x), 0) : Number(v);
+  try { const r = await api('control', { action: 'seek', seconds: sec }); render(r); msg('已跳到 ' + fmt(sec)); } catch (e) { msg('失敗：' + e.message, false); }
+};
+$('#btn-max').onclick = async () => { try { const r = await api('settings', { maxUsers: Number($('#max').value) }); render(r); msg('人數上限已更新'); } catch (e) { msg('失敗：' + e.message, false); } };
+$('#url').addEventListener('input', () => { if (/\/live\//.test($('#url').value)) $('#live').checked = true; });
+if (pw) login();
+</script>
+</body></html>

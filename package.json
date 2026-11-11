@@ -1,0 +1,19 @@
+{
+  "name": "hall-des-lumieres-party",
+  "version": "1.0.0",
+  "description": "光之殿堂 3D 多人觀賽派對",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "three": "0.160.0",
+    "ws": "^8.22.2"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "private": true
+}

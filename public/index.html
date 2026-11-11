@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>光之殿堂 · TL × GEN 冠軍賽觀賽派對</title>
+<meta name="description" content="在紐約光之殿堂 Hall des Lumières 的 3D 虛擬空間，和大家一起看 TL × GEN 冠軍賽。">
+<meta name="theme-color" content="#120d22">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<script type="importmap">
+{ "imports": { "three": "/vendor/three/build/three.module.js", "three/addons/": "/vendor/three/examples/jsm/" } }
+</script>
+</head>
+<body>
+<div id="stage">
+  <canvas id="gl"></canvas>
+</div>
+
+<!-- HUD -->
+<div id="hud" class="hidden">
+  <div class="hud-top">
+    <div class="brand"><span class="brand-en">HALL DES LUMIÈRES</span><span class="brand-zh">光之殿堂 · TL × GEN 冠軍賽觀賽派對</span></div>
+    <div class="hud-right">
+      <div class="pill" id="online"><span class="dot"></span><span id="online-n">1</span> 人在線</div>
+      <button class="pill btn" id="btn-sound" aria-label="聲音">🔇 開啟聲音</button>
+      <button class="pill btn" id="btn-help" aria-label="操作說明">?</button>
+      <button class="pill btn" id="btn-full" aria-label="全螢幕">⛶</button>
+    </div>
+  </div>
+  <div id="toast"></div>
+  <button id="btn-sit" class="hidden">坐下</button>
+  <div id="joy" class="hidden"><div id="joy-knob"></div></div>
+  <div id="hint">
+    <div class="desk"><b>W A S D</b> / 方向鍵 移動 · <b>Shift</b> 跑步 · <b>拖曳滑鼠</b> 轉視角 · <b>滾輪</b> 拉近拉遠 · <b>E</b> 坐下/站起</div>
+    <div class="mob">左下搖桿移動 · 右側滑動轉視角 · 雙指縮放拉近</div>
+  </div>
+</div>
+
+<!-- 選角畫面 -->
+<div id="select" class="overlay">
+  <div class="panel">
+    <div class="kicker">TL × GEN · WORLDS CHAMPIONSHIP WATCH PARTY</div>
+    <h1><span>HALL DES LUMIÈRES</span><small>光之殿堂 · 紐約曼哈頓 49 Chambers St.</small></h1>
+    <p class="lead">選一個你的顏色，走進殿堂，和大家一起在大螢幕前看冠軍賽。</p>
+    <div class="choices">
+      <button class="choice" data-color="pink"><canvas class="preview" data-color="pink"></canvas><span>粉紅</span></button>
+      <button class="choice" data-color="blue"><canvas class="preview" data-color="blue"></canvas><span>天藍</span></button>
+    </div>
+    <button id="btn-enter" disabled>選一個顏色</button>
+    <div class="status" id="status-line">正在載入殿堂…</div>
+  </div>
+</div>
+
+<!-- 排隊 / 斷線 -->
+<div id="queue" class="overlay hidden">
+  <div class="panel small">
+    <h2>殿堂目前客滿</h2>
+    <p id="queue-text">你正在排隊中…</p>
+    <div class="loader"></div>
+    <p class="muted">有人離開時會自動帶你進場，請不要關閉這個頁面。</p>
+  </div>
+</div>
+<div id="help" class="overlay hidden">
+  <div class="panel small">
+    <h2>操作說明</h2>
+    <ul class="help-list">
+      <li><b>移動</b>：W A S D 或方向鍵（按住 Shift 跑步）；手機用左下搖桿</li>
+      <li><b>轉視角</b>：按住滑鼠拖曳；手機在右半邊滑動</li>
+      <li><b>拉近 / 拉遠</b>：滑鼠滾輪；手機雙指縮放。拉到最近就是第一人稱，可以近距離看建築細節</li>
+      <li><b>坐下 / 站起</b>：走到椅子旁按 E 或點「坐下」；再按一次或移動就會站起來</li>
+      <li><b>聲音</b>：點右上角「開啟聲音」，走進大廳聲音會變大</li>
+    </ul>
+    <button class="close" data-close="help">知道了</button>
+  </div>
+</div>
+<div id="loading-veil"></div>
+
+<script type="module" src="/js/main.js"></script>
+</body>
+</html>
