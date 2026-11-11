@@ -513,7 +513,7 @@ function buildInterior(scene, anim, q, renderer) {
   box(-14, 0, -58, -13.9, 0.3, -6, 'dark'); box(13.9, 0, -58, 14, 0.3, -6, 'dark');
 
   // 入口平台與往下的大階梯
-  box(-7, 0, -10, 7, 1.2, -6.5, 'marble', true);
+  box(-7, 0, -10, 7, 1.2, -6.0, 'marble', true);
   floors.push({ x0: -7, x1: 7, z0: -10, z1: -6.0, y: 1.2 });
   for (let i = 0; i < 8; i++) {
     // 每一階只建自己那一段，避免面重疊閃爍；最低一階高 0.15，不與地板同高
@@ -539,7 +539,7 @@ function buildInterior(scene, anim, q, renderer) {
     box(x - 0.85, 0, z - 0.85, x + 0.85, 0.65, z + 0.85, 'granite', true);
     box(x - 0.7, 0.65, z - 0.7, x + 0.7, 12.4, z + 0.7, 'marble', true);
     box(x - 0.8, 0.65, z - 0.8, x + 0.8, 0.8, z + 0.8, 'plain');
-    box(x - 0.82, 6.6, z - 0.82, x + 0.82, 7.0, z + 0.82, 'plain');
+    box(x - 0.82, 6.52, z - 0.82, x + 0.82, 7.08, z + 0.82, 'plain');
     box(x - 0.86, 11.9, z - 0.86, x + 0.86, 12.4, z + 0.86, 'plain');
     box(x - 0.75, 11.6, z - 0.75, x + 0.75, 11.66, z + 0.75, 'gold');
     // 牆上壁柱
@@ -548,13 +548,13 @@ function buildInterior(scene, anim, q, renderer) {
   // 中殿上方的簷部
   for (const s of [-1, 1]) {
     const xi = s * 6.6, xo = s * 8.4;
-    box(Math.min(xi, xo), 12.4, -58, Math.max(xi, xo), 13.6, -6.5, 'plain');
-    box(Math.min(s * 6.3, s * 6.6), 13.2, -58, Math.max(s * 6.3, s * 6.6), 13.65, -6.5, 'plain');
-    box(Math.min(s * 6.55, s * 6.6), 12.75, -58, Math.max(s * 6.55, s * 6.6), 12.9, -6.5, 'gold');
+    box(Math.min(xi, xo), 12.4, -58.2, Math.max(xi, xo), 13.6, -6.3, 'plain');
+    box(Math.min(s * 6.3, s * 6.65), 13.2, -58.2, Math.max(s * 6.3, s * 6.65), 13.7, -6.3, 'plain');
+    box(Math.min(s * 6.5, s * 6.64), 12.75, -58.2, Math.max(s * 6.5, s * 6.64), 12.9, -6.3, 'gold');
     for (let z = -57.8; z < -6.6; z += 0.32) box(Math.min(s * 6.42, s * 6.6), 13.02, z, Math.max(s * 6.42, s * 6.6), 13.2, z + 0.16, 'plain');
     // 夾層樓面帶
-    box(Math.min(s * 6.7, s * 8.4), 6.6, -58, Math.max(s * 6.7, s * 8.4), 7.0, -6.5, 'plain');
-    box(Math.min(s * 6.68, s * 6.72), 6.72, -58, Math.max(s * 6.68, s * 6.72), 6.86, -6.5, 'gold');
+    box(Math.min(s * 6.7, s * 8.4), 6.6, -58.2, Math.max(s * 6.7, s * 8.4), 7.0, -6.3, 'plain');
+    box(Math.min(s * 6.62, s * 6.76), 6.72, -58.2, Math.max(s * 6.62, s * 6.76), 6.86, -6.3, 'gold');
   }
 
   // 筒形拱頂（藻井）
@@ -583,7 +583,7 @@ function buildInterior(scene, anim, q, renderer) {
   });
 
   // 側廊天花
-  for (const s of [-1, 1]) box(Math.min(s * 8.4, s * 14), 13.6, -58, Math.max(s * 8.4, s * 14), 13.95, -6.5, 'coffer');
+  for (const s of [-1, 1]) box(Math.min(s * 8.4, s * 14), 13.6, -58.2, Math.max(s * 8.4, s * 14), 13.95, -6.3, 'coffer');
   // 夾層（二樓迴廊）與通往夾層的樓梯
   for (const s of [-1, 1]) {
     const xa = s > 0 ? 8.2 : -14, xb = s > 0 ? 14 : -8.2;
