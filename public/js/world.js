@@ -647,11 +647,21 @@ function buildInterior(scene, anim, q, renderer) {
     chair(x, 0, z, 0, true);
   }
   // 二樓迴廊：兩排椅子沿著欄杆排列，面向中間大廳（左側朝右、右側朝左）
-  for (const s of [-1, 1]) for (let c = 0; c < 2; c++) for (let z = -26.8; z > -53.6; z -= 1.1) {
-    chair(s * (8.6 + c * 1.2), 7, z, s * Math.PI / 2, true);
+  // 往後退並做成兩階的觀賽席，坐下時視線能越過欄杆
+  for (const s of [-1, 1]) {
+    const T1 = [9.6, 11.4], T2 = [11.4, 13.55];
+    box(Math.min(s * T1[0], s * T1[1]), 7.0, -53.7, Math.max(s * T1[0], s * T1[1]), 7.42, -26.2, 'marble');
+    box(Math.min(s * T2[0], s * T2[1]), 7.0, -53.7, Math.max(s * T2[0], s * T2[1]), 7.84, -26.2, 'marble');
+    box(Math.min(s * (T1[0] - 0.02), s * (T1[0] + 0.03)), 7.3, -53.7, Math.max(s * (T1[0] - 0.02), s * (T1[0] + 0.03)), 7.36, -26.2, 'gold');
+    floors.push({ x0: Math.min(s * T1[0], s * T1[1]), x1: Math.max(s * T1[0], s * T1[1]), z0: -53.7, z1: -26.2, y: 7.42 });
+    floors.push({ x0: Math.min(s * T2[0], s * T2[1]), x1: Math.max(s * T2[0], s * T2[1]), z0: -53.7, z1: -26.2, y: 7.84 });
+    for (let z = -27.0; z > -53.4; z -= 1.1) {
+      chair(s * 10.5, 7.42, z, s * Math.PI / 2, true);
+      chair(s * 12.45, 7.84, z, s * Math.PI / 2, true);
+    }
   }
   // 側廊的雞尾酒桌
-  for (const s of [-1, 1]) for (const z of [-14, -21]) cocktail(scene, s * 11, z);
+  for (const s of [-1, 1]) for (const z of [-41.5]) cocktail(scene, s * 11, z); // 放在二樓下方的側廊，不擋樓梯
 
   // 室內燈光
   const L = (c, i, x, y, z, d = 34) => { const l = new THREE.PointLight(c, i, d, 2); l.position.set(x, y, z); scene.add(l); return l; };
@@ -801,17 +811,17 @@ function projectionMaterial() {
         float pr = R*(0.62+0.38*abs(cos(a*n*0.5))); return smoothstep(0.04,0.0, r-pr); }
       void main(){
         float t = uTime*0.12;
-        vec2 q = vec2(vW.z, vW.y);
+        vec2 q = vec2(vW.z + vW.x, vW.y);
         vec3 v = voro(q*2.4);
         float lead = smoothstep(0.015,0.07, v.x);
         float hc = h1(v.yz);
         // 背景：上方天空藍到下方葉綠
         vec3 sky = mix(vec3(0.28,0.46,0.72), vec3(0.55,0.72,0.86), hc);
         vec3 leaf = mix(vec3(0.16,0.42,0.22), vec3(0.42,0.62,0.30), hc);
-        float hy = smoothstep(2.0,8.0, vW.y + sin(vW.z*0.35+t)*1.2);
+        float hy = smoothstep(2.0,8.0, vW.y + sin(q.x*0.35+t)*1.2);
         vec3 col = mix(leaf, sky, hy);
         // 藤蔓
-        float vine = smoothstep(0.18,0.0, abs(vW.y - 3.0 - sin(vW.z*0.45)*1.6));
+        float vine = smoothstep(0.18,0.0, abs(vW.y - 3.0 - sin(q.x*0.45)*1.6));
         col = mix(col, vec3(0.20,0.50,0.22), vine);
         // 重複排列的花朵（大小交錯）
         vec2 cell = vec2(floor((q.x+2.0)/7.0), 0.0);
@@ -827,7 +837,7 @@ function projectionMaterial() {
         col = mix(col, vec3(0.86,0.45,0.15), f1c);
         col = mix(col, petalB, f2);
         // 光線緩慢掃過
-        float sweep = 0.75 + 0.25*sin(vW.z*0.12 - uTime*0.25);
+        float sweep = 0.75 + 0.25*sin(q.x*0.12 - uTime*0.25);
         col *= (0.28 + 0.72*lead) * sweep;
         gl_FragColor = vec4(col*0.9, 1.0);
         #include <colorspace_fragment>
