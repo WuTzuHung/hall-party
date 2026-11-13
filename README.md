@@ -1,4 +1,4 @@
-# 光之殿堂 · TL × GEN 冠軍賽 3D 觀賽派對
+# 光之殿堂 · GEN.G vs BLG 決賽 3D 觀賽派對
 
 用網址進來就能進入的多人 3D 空間，場景還原紐約曼哈頓的 Hall des Lumières（光之殿堂，原 Emigrant Industrial Savings Bank，49 Chambers St.）。
 
