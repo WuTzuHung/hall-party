@@ -99,3 +99,79 @@ body.touch #seat-tools{bottom:auto;top:calc(max(12px,env(safe-area-inset-top)) +
 #full-exit:hover{opacity:1}
 body.mode-full #hud > :not(#full-exit){display:none!important}
 body.mode-full #hud{display:block!important}
+
+/* ---- 名字輸入 ---- */
+.name-field{display:flex;align-items:center;gap:12px;max-width:460px;margin:0 auto 16px;padding:4px 6px 4px 16px;border-radius:14px;
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);transition:border-color .2s,background .2s}
+.name-field:focus-within{border-color:var(--line);background:rgba(224,189,106,.06);box-shadow:0 0 0 3px rgba(224,189,106,.08)}
+.name-label{flex:none;font-size:13px;letter-spacing:.12em;color:var(--gold)}
+#name-input{flex:1;min-width:0;padding:11px 8px;border:0;outline:0;background:transparent;color:var(--ink);font:500 16px "Noto Sans TC",system-ui,sans-serif;letter-spacing:.04em}
+#name-input::placeholder{color:rgba(201,191,216,.55)}
+.overlay .panel{max-height:calc(100dvh - 32px);overflow-y:auto;overscroll-behavior:contain}
+
+/* ---- 跳躍按鈕（手機） ---- */
+#btn-jump{position:absolute;right:max(26px,env(safe-area-inset-right));bottom:max(30px,calc(env(safe-area-inset-bottom) + 18px));width:62px;height:62px;
+  border-radius:50%;pointer-events:auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;
+  border:1px solid var(--line);background:var(--glass);color:var(--ink);font-size:11px;font-weight:700;letter-spacing:.2em;padding-left:.2em;
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 6px 18px rgba(0,0,0,.35);touch-action:none;user-select:none;-webkit-user-select:none}
+#btn-jump svg{color:var(--gold);margin-bottom:1px}
+#btn-jump:active,#btn-jump.press{transform:scale(.93);background:rgba(60,40,90,.8)}
+
+/* ---- 滑鼠鎖定時的準星 ---- */
+#crosshair{position:absolute;left:50%;top:50%;width:5px;height:5px;margin:-2.5px 0 0 -2.5px;border-radius:50%;background:rgba(255,255,255,.75);
+  box-shadow:0 0 0 1px rgba(0,0,0,.35);opacity:0;transition:opacity .2s}
+body.locked #crosshair{opacity:1}
+body.locked #hint{opacity:0}
+
+/* ---- 聊天輸入（左下） ---- */
+#chat{position:absolute;left:max(16px,env(safe-area-inset-left));bottom:max(16px,env(safe-area-inset-bottom));pointer-events:auto;display:flex;align-items:center}
+#chat-form{display:flex;align-items:center;width:min(300px,calc(100vw - 32px));height:38px;padding:0 4px 0 14px;border-radius:999px;
+  background:rgba(14,9,28,.34);border:1px solid rgba(255,255,255,.1);opacity:.62;transition:opacity .25s,background .25s,border-color .25s;
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+#chat-form:hover,#chat.focus #chat-form{opacity:1}
+#chat.focus #chat-form{background:rgba(14,9,28,.66);border-color:var(--line)}
+#chat-input{flex:1;min-width:0;height:100%;border:0;outline:0;background:transparent;color:var(--ink);font:400 13.5px "Noto Sans TC",system-ui,sans-serif}
+#chat-input::placeholder{color:rgba(201,191,216,.6)}
+#chat-min{flex:none;width:28px;height:28px;border-radius:50%;border:0;background:transparent;color:var(--muted);display:grid;place-items:center;opacity:.7}
+#chat-min:hover{opacity:1;background:rgba(255,255,255,.08)}
+#chat-toggle{display:none;width:40px;height:40px;border-radius:50%;border:1px solid rgba(255,255,255,.14);background:rgba(14,9,28,.42);color:var(--ink);
+  place-items:center;opacity:.75;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);transition:opacity .2s}
+#chat-toggle:hover{opacity:1}
+#chat.collapsed #chat-form{display:none}
+#chat.collapsed #chat-toggle{display:grid}
+body.touch #chat-input{font-size:16px} /* iOS：16px 以上才不會自動放大畫面 */
+body.touch #chat-form{width:min(280px,calc(100vw - 120px))}
+/* 桌機提示列避開左下的聊天框 */
+body:not(.touch) #hint{white-space:normal;text-align:center;max-width:min(860px,calc(100vw - 2 * 340px));min-width:300px;border-radius:16px;line-height:1.55}
+@media (max-width:1000px){ body:not(.touch) #hint{left:auto;right:16px;transform:none;max-width:calc(100vw - 360px)} }
+
+/* ---- 公開訊息串（右上，類似 Twitch） ---- */
+#chat-feed{position:absolute;right:max(16px,env(safe-area-inset-right));top:calc(max(12px,env(safe-area-inset-top)) + 40px);width:min(330px,36vw);
+  max-height:min(56vh,500px);padding-top:12px;display:flex;flex-direction:column;justify-content:flex-end;align-items:flex-end;gap:4px;overflow:hidden;pointer-events:none;
+  -webkit-mask-image:linear-gradient(180deg,transparent 0,#000 12px);mask-image:linear-gradient(180deg,transparent 0,#000 12px)}
+.cf-line{flex:none;max-width:100%;max-height:140px;padding:4px 10px 5px;border-radius:11px;background:rgba(14,9,28,.5);border:1px solid rgba(255,255,255,.06);
+  font-size:12.5px;line-height:1.45;color:#f3eee6;text-shadow:0 1px 2px rgba(0,0,0,.5);overflow-wrap:anywhere;word-break:break-word;
+  animation:cf-in .25s ease-out;transition:opacity .4s,max-height .35s .35s,padding .35s .35s,margin .35s .35s,border-width .35s .35s}
+.cf-name{font-weight:700}
+.cf-name.pink{color:var(--pink)} .cf-name.blue{color:var(--blue)}
+.cf-line.gone{opacity:0;max-height:0;padding-top:0;padding-bottom:0;margin-top:-4px;border-width:0}
+@keyframes cf-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+body.touch #chat-feed{width:min(250px,58vw);max-height:min(32vh,216px);top:calc(max(12px,env(safe-area-inset-top)) + 38px)}
+body.touch .cf-line{font-size:11.5px;padding:3px 8px 4px}
+body.touch.seated #chat-feed{top:calc(max(12px,env(safe-area-inset-top)) + 98px)}
+@media (max-width:560px){ #chat-feed{top:calc(max(12px,env(safe-area-inset-top)) + 36px)} }
+/* 矮螢幕（筆電視窗、橫向手機）：選角面板縮小，讓「走進光之殿堂」不用捲動就看得到 */
+@media (max-height:720px){
+  .panel{padding:18px 20px 16px}
+  h1{margin:6px 0 4px} h1 small{margin-top:4px}
+  .lead{margin:6px 0 12px}
+  .name-field{margin-bottom:12px}
+  .choices{margin-bottom:12px}
+  .choice canvas{aspect-ratio:auto;height:min(24vh,180px)}
+}
+@media (max-height:440px){
+  .lead,h1 small{display:none}
+  h1 span{font-size:26px}
+  .choice canvas{height:min(28vh,110px)}
+  .choice{padding:6px 8px 8px} #btn-enter{padding:12px 20px}
+}

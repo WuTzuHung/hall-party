@@ -93,16 +93,23 @@ function broadcastQueue() {
   queue.forEach((ws, i) => send(ws, { t: 'queue', position: i + 1, online: players.size, max: state.maxUsers }));
 }
 
+// 名字／聊天文字清理：去掉控制字元、雙向覆寫與零寬字元、角括號，合併空白，依「字」（code point）截斷
+const BAD_CHARS = /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff\ufff9-\ufffb<>]/g;
+function cleanText(v, max) {
+  const s = String(v ?? '').replace(BAD_CHARS, '').replace(/\s+/g, ' ').trim();
+  return Array.from(s).slice(0, max).join('').trim();
+}
 function admit(ws) {
   const id = String(nextId++);
-  const p = { id, ws, color: ws._color, x: 0, y: 0, z: 30, ry: Math.PI, anim: 0 };
+  const name = ws._name || ('訪客' + String(1000 + Math.floor(Math.random() * 9000)));
+  const p = { id, ws, color: ws._color, name, x: 0, y: 0, z: 30, ry: Math.PI, anim: 0 };
   players.set(id, p);
   ws._playerId = id;
   send(ws, {
-    t: 'welcome', id, serverTime: Date.now(), video: publicVideo(), max: state.maxUsers,
-    players: [...players.values()].filter(o => o.id !== id).map(o => ({ id: o.id, c: o.color, x: o.x, y: o.y, z: o.z, ry: o.ry, a: o.anim })),
+    t: 'welcome', id, name, serverTime: Date.now(), video: publicVideo(), max: state.maxUsers,
+    players: [...players.values()].filter(o => o.id !== id).map(o => ({ id: o.id, c: o.color, n: o.name, x: o.x, y: o.y, z: o.z, ry: o.ry, a: o.anim })),
   });
-  broadcast({ t: 'join', id, c: p.color, x: p.x, y: p.y, z: p.z, ry: p.ry }, ws);
+  broadcast({ t: 'join', id, c: p.color, n: name, x: p.x, y: p.y, z: p.z, ry: p.ry }, ws);
 }
 function tryAdmitQueue() {
   while (queue.length && players.size < state.maxUsers) {
@@ -209,14 +216,19 @@ const server = http.createServer(async (req, res) => {
 
 // ---------- WebSocket ----------
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 4096 });
+const CHAT_MAX = 120, NAME_MAX = 16;
 wss.on('connection', (ws) => {
-  ws._alive = true;
-  ws.on('pong', () => { ws._alive = true; });
+  ws._seen = Date.now();
+  ws._chat = []; // 最近送出聊天的時間（只用來限流，不存內容）
+  ws.on('pong', () => { ws._seen = Date.now(); });
   ws.on('message', (raw) => {
+    ws._seen = Date.now();
     let m; try { m = JSON.parse(raw); } catch (_) { return; }
+    if (!m || typeof m !== 'object') return;
     if (m.t === 'hello') {
       if (ws._playerId || queue.includes(ws)) return;
       ws._color = m.color === 'blue' ? 'blue' : 'pink';
+      ws._name = cleanText(m.name, NAME_MAX);
       if (players.size < state.maxUsers) admit(ws);
       else { queue.push(ws); broadcastQueue(); }
     } else if (m.t === 'p' && ws._playerId) {
@@ -228,12 +240,27 @@ wss.on('connection', (ws) => {
       send(ws, { t: 'pong', c: m.c, s: Date.now() });
     } else if (m.t === 'wave' && ws._playerId) {
       broadcast({ t: 'wave', id: ws._playerId }, ws);
+    } else if (m.t === 'chat' && ws._playerId) {
+      // 聊天：只轉發、絕不儲存（不寫檔、不留歷史，新進場的人看不到之前的訊息）
+      const p = players.get(ws._playerId); if (!p) return;
+      const now = Date.now();
+      ws._chat = ws._chat.filter(t => now - t < 5000);
+      if (ws._chat.length >= 5 || (ws._chat.length && now - ws._chat[ws._chat.length - 1] < 800)) return; // 限流：0.8 秒 1 則、5 秒最多 5 則
+      const text = cleanText(m.text, CHAT_MAX); if (!text) return;
+      ws._chat.push(now);
+      broadcast({ t: 'chat', id: p.id, name: p.name, color: p.color, text });
+    } else if (m.t === 'info' && ws._playerId && Array.isArray(m.ids)) {
+      // 用戶端遇到不認得的玩家時補要名字與顏色
+      const list = [];
+      for (const id of m.ids.slice(0, 80)) { const o = players.get(String(id)); if (o) list.push({ id: o.id, c: o.color, n: o.name }); }
+      if (list.length) send(ws, { t: 'info', p: list });
     }
   });
+  ws.on('error', () => { });
   ws.on('close', () => {
     const qi = queue.indexOf(ws);
     if (qi >= 0) { queue.splice(qi, 1); broadcastQueue(); }
-    if (ws._playerId) {
+    if (ws._playerId && players.get(ws._playerId)?.ws === ws) {
       players.delete(ws._playerId);
       broadcast({ t: 'leave', id: ws._playerId });
       tryAdmitQueue();
@@ -248,13 +275,15 @@ setInterval(() => {
   for (const p of players.values()) list.push([p.id, +p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2), +p.ry.toFixed(2), +p.anim.toFixed(2)]);
   broadcast({ t: 's', p: list, n: players.size });
 }, TICK_MS);
-// 心跳：清除斷線
+// 心跳：每 2 秒 ping 一次，超過 11 秒沒有任何回應（pong 或訊息）就視為斷線（分頁被直接關掉、網路中斷時不會留下幽靈角色）
+const DEAD_MS = Number(process.env.DEAD_MS || 11000);
 setInterval(() => {
+  const now = Date.now();
   for (const ws of wss.clients) {
-    if (!ws._alive) { ws.terminate(); continue; }
-    ws._alive = false; ws.ping();
+    if (now - ws._seen > DEAD_MS) { ws.terminate(); continue; }
+    try { ws.ping(); } catch (_) { }
   }
-}, 15000);
+}, 2000);
 // 定期校正影片進度
 setInterval(() => broadcast({ t: 'video', video: publicVideo() }), 10000);
 

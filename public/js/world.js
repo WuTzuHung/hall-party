@@ -235,7 +235,7 @@ function buildStreet(scene, anim) {
   // 消防栓、垃圾桶、圍欄
   cyl(0.18, 0.2, 0.7, -9, 0.15, 7.2, 'carMaroon', 10);
   cyl(0.3, 0.26, 0.95, 9, 0.15, 7.2, 'green', 12);
-  walls.push({ x0: -9.25, x1: -8.75, z0: 6.95, z1: 7.45, y0: 0, y1: 1 }, { x0: 8.65, x1: 9.35, z0: 6.85, z1: 7.55, y0: 0, y1: 1 });
+  walls.push({ x0: -9.25, x1: -8.75, z0: 6.95, z1: 7.45, y0: 0, y1: 1.7 }, { x0: 8.65, x1: 9.35, z0: 6.85, z1: 7.55, y0: 0, y1: 1.7 }); // 碰撞高度高於跳躍高度，跳起來也不會落進物件裡
 }
 
 function car(x, z, key, dir) {
@@ -370,7 +370,7 @@ function buildFacade(scene, anim, q) {
   box(-0.28, 5.1, 0.1, 0.28, 6.25, 0.55, 'plain'); // 拱心石
   const shield = new THREE.CylinderGeometry(0.42, 0.42, 0.18, 24); place(shield, { x: 0, y: 5.6, z: 0.62, rx: Math.PI / 2, sx: 0.8, sz: 1.15 }); B.add(shield, 'plain');
   // 門楣刻字：決賽兩隊（陰刻羅馬大寫）
-  const signT = T.textTexture('GEN.G   ·   BLG', { w: 1024, h: 96, color: '#4a3d2c', engrave: 'rgba(255,250,235,0.75)', font: '700 54px "Cinzel", "Times New Roman", serif', letter: 18 });
+  const signT = T.textTexture('GENG   ·   BLG', { w: 1024, h: 96, color: '#4a3d2c', engrave: 'rgba(255,250,235,0.75)', font: '700 54px "Cinzel", "Times New Roman", serif', letter: 18 });
   const sign = new THREE.Mesh(new THREE.PlaneGeometry(4.3, 0.4), decal({ map: signT, roughness: 0.8 }));
   sign.position.set(0, 4.8, 0.585); scene.add(sign);
   // 打開的銅門
@@ -382,7 +382,13 @@ function buildFacade(scene, anim, q) {
     box(-2.7, 0, z0, 2.7, y, z1, 'granite');
     box(-1.4, y - 0.21, i === 4 ? 0 : z0 + 0.03, 1.4, y + 0.03, z1 + 0.03, 'carpet');
   }
-  floors.push({ x0: -2.7, x1: 2.7, z0: 0, z1: 1.95, ya: 1.2, yb: 0.15 });
+  // 每一階都是平的踏面（原本用斜坡近似，腳會陷進台階裡）；地毯比石階高 3cm
+  for (let i = 0; i < 5; i++) {
+    const y = 0.15 + (i + 1) * 0.21, z1 = 1.9 - i * 0.38, z0 = i === 4 ? 0 : z1 - 0.38;
+    floors.push({ x0: -2.7, x1: 2.7, z0, z1, y });
+    floors.push({ x0: -1.4, x1: 1.4, z0: i === 4 ? 0 : z0 + 0.03, z1: z1 + 0.03, y: y + 0.03 });
+  }
+  floors.push({ x0: -1.4, x1: 1.4, z0: 1.93, z1: 6.6, y: 0.18 }); // 人行道上的地毯
   floors.push({ x0: -1.5, x1: 1.5, z0: -1.6, z1: 0, y: 1.2 });
   box(-1.4, 0.1, 1.9, 1.4, 0.18, 6.6, 'carpet');
   // 紅絨柱繩
@@ -393,7 +399,7 @@ function buildFacade(scene, anim, q) {
   for (const s of [-1, 1]) {
     // 絨繩：每兩根柱子之間各垂一段（原本一整條會穿過中間那根柱子）
     for (const zc of [3.4, 5.4]) { const rope = new THREE.TorusGeometry(1, 0.028, 5, 14, Math.PI); place(rope, { x: s * 1.75, y: 1.06, z: zc, ry: Math.PI / 2, rz: Math.PI, sy: 0.24 }); B.add(rope, 'carMaroon'); }
-    walls.push({ x0: s * 1.75 - 0.08, x1: s * 1.75 + 0.08, z0: 2.3, z1: 6.5, y0: 0, y1: 1.2 });
+    walls.push({ x0: s * 1.75 - 0.08, x1: s * 1.75 + 0.08, z0: 2.3, z1: 6.5, y0: 0, y1: 1.7 });
   }
   // 門邊燈籠：掛在門框正面（原本的位置插進了兩旁的巨柱裡）
   for (const s of [-1, 1]) {
@@ -406,7 +412,7 @@ function buildFacade(scene, anim, q) {
     glow(scene, lx, 3.4, 0.8, 1.5, 0xffd090, 0.6);
   }
   // 入口旁的立牌：決賽對戰組合（深色牌面、金線框、Cinzel 刻字風）
-  const aT = T.textTexture([{ rule: 150, y: 96 }, { t: 'GEN.G', y: 176 }, { t: 'VS', font: '500 34px "Cinzel", "Times New Roman", serif', y: 250, letter: 12 }, { t: 'BLG', y: 326 }, { rule: 150, y: 404 }],
+  const aT = T.textTexture([{ rule: 150, y: 96 }, { t: 'GENG', y: 176 }, { t: 'VS', font: '500 34px "Cinzel", "Times New Roman", serif', y: 250, letter: 12 }, { t: 'BLG', y: 326 }, { rule: 150, y: 404 }],
     { w: 800, h: 500, bg: '#171320', color: '#e6c77c', font: '700 76px "Cinzel", "Times New Roman", serif', letter: 16, border: '#c9a24a' });
   const aMat = new THREE.MeshStandardMaterial({ map: aT, emissive: 0xffffff, emissiveMap: aT, emissiveIntensity: 0.45, roughness: 0.6 });
   box(3.66, 0.93, 2.585, 4.74, 1.69, 2.615, 'dark');
@@ -480,8 +486,8 @@ function buildFacade(scene, anim, q) {
 
   // 旗幟
   for (const s of [-1, 1]) {
-    // 左旗 GEN.G、右旗 BLG
-    const flagT = s < 0 ? T.flag('GEN.G', '#2a0f18') : T.flag('BLG', '#131d40');
+    // 左旗 GENG、右旗 BLG
+    const flagT = s < 0 ? T.flag('GENG', '#2a0f18') : T.flag('BLG', '#131d40');
     const flagMat = new THREE.MeshStandardMaterial({ map: flagT, side: THREE.DoubleSide, roughness: 0.85 });
     const x = s * 9.6;
     const pole = new THREE.CylinderGeometry(0.05, 0.05, 3.4, 8); place(pole, { x, y: 19.6, z: 1.45, rx: 1.05 }); B.add(pole, 'dark');
@@ -502,7 +508,7 @@ function buildFacade(scene, anim, q) {
   }
   for (const x of [-24, -12, 12, 24]) { // 地面投光燈具
     box(x - 0.25, 0.15, 6.4, x + 0.25, 0.45, 6.9, 'dark');
-    walls.push({ x0: x - 0.25, x1: x + 0.25, z0: 6.4, z1: 6.9, y0: 0, y1: 0.6 });
+    walls.push({ x0: x - 0.25, x1: x + 0.25, z0: 6.4, z1: 6.9, y0: 0, y1: 1.5 });
   }
   // 入口內透出的光
   const doorL = new THREE.PointLight(0xc58bff, 30, 12, 2); doorL.position.set(0, 3, 1); scene.add(doorL);
@@ -546,7 +552,7 @@ function buildInterior(scene, anim, q, renderer) {
     const y = 1.2 - i * 0.15; const z1 = -10 - i * 0.375, z0 = z1 - 0.375;
     box(-4, 0, z0, 4, y, z1, 'marble');
   }
-  floors.push({ x0: -4, x1: 4, z0: -13, z1: -10, ya: 0, yb: 1.2 });
+  for (let i = 0; i < 8; i++) { const z1 = -10 - i * 0.375; floors.push({ x0: -4, x1: 4, z0: z1 - 0.375, z1, y: 1.2 - i * 0.15 }); } // 平的踏面，不用斜坡
   solidOnly(-4, 1.2 - 0.5, -10.2, 4, 1.25, -10); // 防止從平台前緣以下穿入
   // 欄杆：整圈都收在平台邊緣以內（原本左側整條懸在平台外、前緣有一半懸空）
   for (const s of [-1, 1]) {
@@ -652,7 +658,7 @@ function buildInterior(scene, anim, q, renderer) {
       const y = (i + 1) * 0.175; const z1 = -13 - i * 0.3, z0 = z1 - 0.3;
       box(sx0, Math.max(0, y - 0.6), z0, sx1, y, z1, 'marble');
     }
-    floors.push({ x0: sx0, x1: sx1, z0: -25, z1: -13, ya: 7, yb: 0 });
+    for (let i = 0; i < 40; i++) { const z1 = -13 - i * 0.3; floors.push({ x0: sx0, x1: sx1, z0: z1 - 0.3, z1, y: (i + 1) * 0.175 }); } // 每階 17.5cm 的平踏面
     slopedParapet(s > 0 ? 8.75 : -9.0, s > 0 ? 9.0 : -8.75, -25, -13, 7, 0);
     solidOnly(sx0, -0.5, -25.4, sx1, 6.3, -25.0); // 樓梯下方
     solidOnly(Math.min(s * 8.2, s * 9), -0.5, -25.6, Math.max(s * 8.2, s * 9), 6.6, -13);
@@ -712,6 +718,10 @@ function buildInterior(scene, anim, q, renderer) {
     for (const [tx, ty] of [[T1[0], 7.42], [T2[0], 7.84]]) box(Math.min(s * (tx - 0.04), s * (tx + 0.05)), ty - 0.09, -53.74, Math.max(s * (tx - 0.04), s * (tx + 0.05)), ty + 0.04, -26.16, 'gold');
     floors.push({ x0: Math.min(s * T1[0], s * T1[1]), x1: Math.max(s * T1[0], s * T1[1]), z0: -53.7, z1: -26.2, y: 7.42 });
     floors.push({ x0: Math.min(s * T2[0], s * 14), x1: Math.max(s * T2[0], s * 14), z0: -53.7, z1: -26.2, y: 7.84 });
+    for (const [tx, ty] of [[T1[0], 7.42], [T2[0], 7.84]]) floors.push({ x0: Math.min(s * (tx - 0.04), s * (tx + 0.05)), x1: Math.max(s * (tx - 0.04), s * (tx + 0.05)), z0: -53.74, z1: -26.16, y: ty + 0.04 });
+    // 第二階比迴廊地面高 0.84m，跨不上去：兩端（z 方向）的立面要擋住，但從第一階（高 0.42m）仍可以直接踏上去
+    // st：可跨上的高度；腳高於 y1 - st 時不擋（踏上去），否則擋住
+    walls.push({ x0: Math.min(s * T2[0], s * 14), x1: Math.max(s * T2[0], s * 14), z0: -53.7, z1: -26.2, y0: 7.0, y1: 7.84, st: 0.55 });
     for (let k = 0; k < 24; k++) { // 24 張、間距 1.1m，前後各留 1.1m
       const z = -27.3 - k * 1.1;
       chair(s * 10.55, 7.42, z, s * Math.PI / 2, true);
@@ -886,6 +896,13 @@ function chair(x, y, z, ry, seat = true) {
   B.add(place(t.cushion.clone(), { x, y, z, ry }), 'cushion');
   // 面向：ry=0 時椅背在 +z 側，坐著面向 -z
   if (seat) seats.push({ x, y: y + 0.5, z, ry: ry + Math.PI });
+  // 椅子的碰撞方塊：約椅腳範圍（寬 0.38、深 0.45，比椅面略小，排與排之間才走得過去），高度高於跳躍高度，避免跳上去後落進椅子裡
+  const c = Math.cos(ry), sn = Math.sin(ry); let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (const [lx, lz] of [[-0.19, -0.19], [0.19, -0.19], [-0.19, 0.26], [0.19, 0.26]]) {
+    const wx = x + lx * c + lz * sn, wz = z - lx * sn + lz * c;
+    x0 = Math.min(x0, wx); x1 = Math.max(x1, wx); z0 = Math.min(z0, wz); z1 = Math.max(z1, wz);
+  }
+  walls.push({ x0, x1, z0, z1, y0: y, y1: y + 1.6, chair: true });
 }
 
 function banquet(scene, x, z0, z1) {
@@ -893,7 +910,7 @@ function banquet(scene, x, z0, z1) {
   box(x - w / 2, 0.72, z1, x + w / 2, 0.77, z0, 'cloth');
   box(x - w / 2 + 0.04, 0.0, z1 + 0.04, x + w / 2 - 0.04, 0.72, z0 - 0.04, 'cloth');
   box(x - 0.22, 0.66, z1 - 0.03, x + 0.22, 0.8, z0 + 0.03, 'clothDark'); // 桌旗：比桌面高 3cm，兩端垂下
-  walls.push({ x0: x - w / 2, x1: x + w / 2, z0: z1, z1: z0, y0: 0, y1: 1 });
+  walls.push({ x0: x - w / 2, x1: x + w / 2, z0: z1, z1: z0, y0: 0, y1: 1.6 });
   // 椅子等距排列，兩端留一樣的空位
   const len = z0 - z1, n = Math.floor(len), m = (len - (n - 1)) / 2;
   for (let k = 0; k < n; k++) { const z = z0 - m - k; chair(x - 0.98, 0, z, -Math.PI / 2); chair(x + 0.98, 0, z, Math.PI / 2); }
@@ -924,13 +941,13 @@ function centerpiece(scene, x, z) {
   }
   for (let k = 0; k < 18; k++) { const f = new THREE.IcosahedronGeometry(0.14, 0); place(f, { x: x + Math.cos(k * 2.4) * 0.35 * (k % 3) / 2, y: 1.05 + (k % 4) * 0.08, z: z + Math.sin(k * 2.4) * 0.35 * (k % 3) / 2 }); B.add(f, k % 3 ? 'flower' : 'flower2'); }
   const lv = new THREE.IcosahedronGeometry(0.45, 1); place(lv, { x, y: 1.0, z, sy: 0.45 }); B.add(lv, 'leaf');
-  walls.push({ x0: x - 1.25, x1: x + 1.25, z0: z - 1.25, z1: z + 1.25, y0: 0, y1: 1.5 });
+  walls.push({ x0: x - 1.25, x1: x + 1.25, z0: z - 1.25, z1: z + 1.25, y0: 0, y1: 1.6 });
 }
 function cocktail(scene, x, z) {
   cyl(0.4, 0.4, 0.04, x, 1.05, z, 'cloth', 24); cyl(0.405, 0.43, 0.16, x, 0.9, z, 'cloth', 24, { open: true }); // 桌面與垂下的桌巾邊
   cyl(0.035, 0.05, 1.03, x, 0.03, z, 'gold', 8); cyl(0.2, 0.3, 0.035, x, 0, z, 'gold', 20); cyl(0.07, 0.035, 0.05, x, 1.0, z, 'gold', 8);
   cyl(0.045, 0.055, 0.02, x, 1.09, z, 'gold', 8); cyl(0.03, 0.03, 0.12, x, 1.11, z, 'candle', 8); glow(scene, x, 1.3, z, 0.5, 0xffb060, 0.8);
-  walls.push({ x0: x - 0.4, x1: x + 0.4, z0: z - 0.4, z1: z + 0.4, y0: 0, y1: 1.2 });
+  walls.push({ x0: x - 0.42, x1: x + 0.42, z0: z - 0.42, z1: z + 0.42, y0: 0, y1: 1.6 });
 }
 
 // 沉浸式投影：程序化彩繪玻璃花卉（像附圖第二張）

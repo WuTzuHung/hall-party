@@ -321,9 +321,10 @@ export function textTexture(lines, { w = 2048, h = 160, bg = 'rgba(0,0,0,0)', co
     ctx.font = txt.font || font;
     if ('letterSpacing' in ctx) ctx.letterSpacing = (txt.letter ?? letter) + 'px';
     if (shadow) { ctx.shadowColor = shadow; ctx.shadowBlur = 12; }
-    if (engrave) { ctx.fillStyle = engrave; ctx.fillText(txt.t, w / 2 + 1.5, y + 2); } // 陰刻的受光邊
+    const cx = w / 2 + ('letterSpacing' in ctx ? (txt.letter ?? letter) / 2 : 0); // 字距會加在最後一個字後面，往右補半個字距才真正置中
+    if (engrave) { ctx.fillStyle = engrave; ctx.fillText(txt.t, cx + 1.5, y + 2); } // 陰刻的受光邊
     ctx.fillStyle = txt.color || color;
-    ctx.fillText(txt.t, w / 2, y);
+    ctx.fillText(txt.t, cx, y);
   });
   };
   draw();
@@ -352,7 +353,7 @@ function laurel(ctx, cx, cy, r, color) {
   }
   ctx.restore();
 }
-// 立面上的古典垂掛旗幟：深色底、金線框、月桂花環與決賽隊名（variant 0 = GEN.G，1 = BLG）
+// 立面上的古典垂掛旗幟：深色底、金線框、月桂花環與決賽隊名（variant 0 = GENG，1 = BLG）
 export function poster(variant = 0) {
   const w = 512, h = 1024; const c = canvas(w, h); const ctx = c.getContext('2d');
   const gold = '#d9b25c', goldHi = '#f0d898';
@@ -379,15 +380,15 @@ export function poster(variant = 0) {
   const rule = (y, hw) => { ctx.fillStyle = gold; ctx.fillRect(w / 2 - hw, y - 1, hw - 14, 2); ctx.fillRect(w / 2 + 14, y - 1, hw - 14, 2); ctx.save(); ctx.translate(w / 2, y); ctx.rotate(Math.PI / 4); ctx.fillRect(-5, -5, 10, 10); ctx.restore(); };
   rule(520, 150);
   ctx.font = '700 64px "Cinzel", "Times New Roman", serif'; if ('letterSpacing' in ctx) ctx.letterSpacing = '14px';
-  ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillText(variant % 2 ? 'BLG' : 'GEN.G', w / 2 + 9, 603);
-  ctx.fillStyle = goldHi; ctx.fillText(variant % 2 ? 'BLG' : 'GEN.G', w / 2 + 7, 600);
+  ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillText(variant % 2 ? 'BLG' : 'GENG', w / 2 + 9, 603);
+  ctx.fillStyle = goldHi; ctx.fillText(variant % 2 ? 'BLG' : 'GENG', w / 2 + 7, 600);
   rule(680, 150);
   ctx.restore();
   };
   draw();
   return refont(toTex(c, { repeat: false }), draw);
 }
-export function flag(text = 'GEN.G', field = '#1b2440') {
+export function flag(text = 'GENG', field = '#1b2440') {
   const w = 256, h = 640; const c = canvas(w, h); const ctx = c.getContext('2d');
   const draw = () => {
   ctx.fillStyle = field; ctx.fillRect(0, 0, w, h);

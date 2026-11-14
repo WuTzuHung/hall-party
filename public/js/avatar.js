@@ -1,6 +1,7 @@
 // 可愛版 3D 角色：圓潤豆豆身形，沒有眼睛、沒有五官，只有粉色或藍色
 import * as THREE from 'three';
 import { radial } from './textures.js';
+import { Labels } from './labels.js';
 
 export const COLORS = {
   pink: { body: 0xffa9c6, sheen: 0xffe0ec, emissive: 0x3a0f20 },
@@ -68,24 +69,44 @@ export class Avatar {
     this.shadow = sh; this.root.add(sh);
     this.phase = Math.random() * 10;
     this.sit = 0; // 0 站 -> 1 坐（平滑過渡）
+    this.air = 0; this.wasAir = false; this.land = 0; // 跳躍姿勢、落地的壓扁回彈
+    this.labels = null;
+  }
+  // 頭上的名牌與對話泡泡（選角預覽的角色不需要，所以用到時才建立）
+  setName(name) { (this.labels ||= new Labels(this.root, this.color)).setName(name); }
+  say(text) { (this.labels ||= new Labels(this.root, this.color)).say(text); }
+  updateLabels(camera, dt, viewH) {
+    if (!this.labels) return;
+    this.labels.group.position.y = 1.5 - this.sit * 0.3; // 頭頂上方（不跟著走路上下晃，比較好讀）
+    this.labels.update(camera, dt, viewH);
   }
   // speed: 0..1+（走路幅度），sitting: bool
-  update(dt, speed, sitting, t) {
+  update(dt, speed, sitting, t, air = false) {
     const target = sitting ? 1 : 0;
     this.sit += (target - this.sit) * Math.min(1, dt * 8);
     const s = this.sit;
+    // 跳躍：起跳時拉長、手往上舉、腳微縮；落地時壓扁一下再彈回
+    if (air && !sitting) this.air += (1 - this.air) * Math.min(1, dt * 16); else this.air += (0 - this.air) * Math.min(1, dt * 12);
+    if (this.wasAir && !air) this.land = 1;
+    this.wasAir = air && !sitting;
+    this.land = Math.max(0, this.land - dt * 5.5);
+    const j = this.air, ld = Math.sin(this.land * Math.PI) * (this.land > 0 ? 1 : 0);
+    if (j > 0.01) speed *= 1 - j * 0.85;
     this.phase += dt * (4 + speed * 7) * (speed > 0.05 ? 1 : 0.25);
     const sw = Math.sin(this.phase) * Math.min(1, speed) * (1 - s);
     const breathe = Math.sin(t * 2.2 + this.phase * 0.1) * 0.012;
     this.pivot.position.y = Math.abs(Math.sin(this.phase)) * 0.06 * Math.min(1, speed) * (1 - s) + breathe - s * 0.3;
-    this.legGroupL.rotation.x = sw * 0.7 - s * 1.45;
-    this.legGroupR.rotation.x = -sw * 0.7 - s * 1.45;
-    this.armL.rotation.x = -sw * 0.8 - s * 0.5; this.armR.rotation.x = sw * 0.8 - s * 0.5;
-    this.armL.rotation.z = -0.35 - (1 - Math.min(1, speed)) * 0.05 + s * 0.15; this.armR.rotation.z = 0.35 + s * -0.15;
+    this.pivot.position.y -= ld * 0.05;
+    this.legGroupL.rotation.x = sw * 0.7 - s * 1.45 - j * 0.55;
+    this.legGroupR.rotation.x = -sw * 0.7 - s * 1.45 + j * 0.3;
+    this.armL.rotation.x = -sw * 0.8 - s * 0.5 - j * 0.35; this.armR.rotation.x = sw * 0.8 - s * 0.5 - j * 0.35;
+    this.armL.rotation.z = -0.35 - (1 - Math.min(1, speed)) * 0.05 + s * 0.15 - j * 1.55; this.armR.rotation.z = 0.35 + s * -0.15 + j * 1.55;
+    const st = j * 0.07 - ld * 0.13; // 正：拉長，負：壓扁
+    this.pivot.scale.set(1 - st * 0.5, 1 + st, 1 - st * 0.5);
     this.pivot.rotation.z = Math.sin(this.phase) * 0.05 * Math.min(1, speed) * (1 - s);
     this.head.rotation.z = Math.sin(t * 1.3 + this.phase) * 0.04;
     this.body.scale.set(1 + breathe, 1 - breathe, 1 + breathe);
     this.shadow.visible = s < 0.5;
   }
-  dispose() { this.root.removeFromParent(); }
+  dispose() { if (this.labels) this.labels.dispose(); this.root.removeFromParent(); }
 }

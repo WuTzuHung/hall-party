@@ -3,6 +3,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildWorld, SPAWN, HALL, SCREEN } from './world.js';
 import { Avatar } from './avatar.js';
 import { BigScreen } from './screen.js';
+import { initChat } from './chat.js';
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -38,8 +39,10 @@ screen.setSize(innerWidth, innerHeight);
 // ---------- 玩家 ----------
 const me = {
   pos: new THREE.Vector3(SPAWN.x, 0.15, SPAWN.z), vy: 0, ry: SPAWN.ry, color: null, avatar: null,
-  speed: 0, seat: null, id: null,
+  speed: 0, seat: null, id: null, name: '',
+  onGround: true, airT: 0, jumping: false, camY: 0.15,
 };
+let jumpQueued = -1e9; // 按下跳躍的時間（容許落地前一點點就按）
 const cam = { yaw: 0, pitch: 0.18, dist: 5.5, targetDist: 5.5, minD: 0, maxD: 14 };
 const keys = {};
 // 觀看模式：normal 一般 / seat 座位第一人稱 / best 正中央最佳視角 / full 螢幕放到最大
@@ -49,6 +52,7 @@ let entered = false;
 
 // ---------- 碰撞與地面 ----------
 const R = 0.32;
+const JUMP_V = 6.0, GRAV = 22; // 跳躍初速與重力：最高約 0.82m，落在所有家具碰撞高度以下
 function groundAt(x, z, y) {
   let best = -Infinity;
   for (const f of world.floors) {
@@ -58,9 +62,11 @@ function groundAt(x, z, y) {
   }
   return best === -Infinity ? 0 : best;
 }
+// 牆擋住玩家的條件：腳高於 y1 - st 就可以跨上去（st 預設 0.35；台階型方塊用 0.55，與地面自動跨階一致）
+const blocks = (c, y) => y + (c.st || 0.35) < c.y1 && y + 1.5 > c.y0;
 function collide(p) {
   for (let it = 0; it < 2; it++) for (const c of world.walls) {
-    if (p.y + 0.35 >= c.y1 || p.y + 1.5 <= c.y0) continue;
+    if (!blocks(c, p.y)) continue;
     const cx = Math.max(c.x0, Math.min(p.x, c.x1)), cz = Math.max(c.z0, Math.min(p.z, c.z1));
     const dx = p.x - cx, dz = p.z - cz; const d2 = dx * dx + dz * dz;
     if (d2 >= R * R) continue;
@@ -70,6 +76,16 @@ function collide(p) {
       if (k === 0) p.x = c.x0 - R; else if (k === 1) p.x = c.x1 + R; else if (k === 2) p.z = c.z0 - R; else p.z = c.z1 + R;
     }
   }
+}
+// 某個位置是否站得下（不與任何碰撞方塊重疊，且腳下有地面、不會掉下去）；回傳地面高度或 null
+function freeSpot(x, y, z) {
+  for (const c of world.walls) {
+    if (!blocks(c, y)) continue;
+    const cx = Math.max(c.x0, Math.min(x, c.x1)), cz = Math.max(c.z0, Math.min(z, c.z1));
+    if ((x - cx) ** 2 + (z - cz) ** 2 < (R + 0.01) ** 2) return null;
+  }
+  const g = groundAt(x, z, y);
+  return Math.abs(g - y) <= 0.45 ? g : null;
 }
 // 相機遮擋：射線 vs 方塊
 function rayBox(o, d, maxT, c) {
@@ -83,17 +99,44 @@ function rayBox(o, d, maxT, c) {
 }
 
 // ---------- 輸入 ----------
+const typing = (e) => { const t = e.target; return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable); };
+const clearKeys = () => { for (const k in keys) keys[k] = false; };
 addEventListener('keydown', (e) => {
-  if (!entered) return;
+  if (!entered || typing(e) || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (!$('#help').classList.contains('hidden')) { if (e.code === 'Escape' || e.code === 'Enter') $('#help').classList.add('hidden'); return; }
+  // 剛點過的 HUD 按鈕還留著焦點時，空白鍵／Enter 會再按一次那顆按鈕：先把焦點移走
+  if (document.activeElement && document.activeElement.tagName === 'BUTTON') document.activeElement.blur();
+  if ((e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'Slash' || e.code === 'KeyT') && viewMode !== 'full') {
+    e.preventDefault(); clearKeys(); chat.open(); return;
+  }
   keys[e.code] = true;
-  if (e.code === 'KeyE') toggleSit();
-  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
+  if (e.code === 'KeyE' && !e.repeat) toggleSit();
+  if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) jumpQueued = performance.now(); }
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
 });
-addEventListener('keyup', (e) => { keys[e.code] = false; });
-addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+addEventListener('keyup', (e) => { keys[e.code] = false; if (e.code === 'Space' && !typing(e)) e.preventDefault(); });
+addEventListener('blur', clearKeys);
+
+// 滑鼠鎖定（FPS 式轉視角）：點一下畫面就鎖定，移動滑鼠直接轉；Esc 放開。沒鎖定時仍可拖曳
+const canLook = () => viewMode !== 'best' && viewMode !== 'full';
+const locked = () => document.pointerLockElement === canvas;
+function lockPointer() {
+  if (isTouch || !entered || locked() || !canLook() || !canvas.requestPointerLock) return;
+  try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => { }); } catch (_) { }
+}
+function unlockPointer() { if (locked()) try { document.exitPointerLock(); } catch (_) { } }
+document.addEventListener('pointerlockchange', () => { document.body.classList.toggle('locked', locked()); if (locked()) pointers.clear(); });
+document.addEventListener('mousemove', (e) => {
+  if (!locked() || !canLook()) return;
+  const k = 0.0022;
+  cam.yaw -= e.movementX * k; cam.pitch = THREE.MathUtils.clamp(cam.pitch + e.movementY * k, -1.2, 1.35);
+});
+let downAt = null;
 
 const pointers = new Map(); let pinchD = 0;
 canvas.addEventListener('pointerdown', (e) => {
+  if (chat && chat.focused) chat.input.blur();
+  if (e.pointerType === 'mouse') { downAt = { x: e.clientX, y: e.clientY, t: performance.now() }; if (locked()) return; }
   canvas.setPointerCapture(e.pointerId);
   if (isTouch && entered && e.clientX < innerWidth * 0.45 && e.clientY > innerHeight * 0.35 && !joy.active) {
     joy = { active: true, id: e.pointerId, ox: e.clientX, oy: e.clientY, x: 0, y: 0 };
@@ -124,6 +167,12 @@ canvas.addEventListener('pointermove', (e) => {
   if (viewMode === 'best' || viewMode === 'full') return;
   const k = isTouch ? 0.006 : 0.0045;
   cam.yaw -= dx * k; cam.pitch = THREE.MathUtils.clamp(cam.pitch + dy * k, -1.2, 1.35);
+});
+canvas.addEventListener('pointerup', (e) => {
+  // 只有「點一下」才鎖定滑鼠；拖曳轉視角放開時不鎖定
+  if (e.pointerType !== 'mouse' || !downAt || e.button !== 0) return;
+  const moved = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y), dt = performance.now() - downAt.t; downAt = null;
+  if (moved < 6 && dt < 450) lockPointer();
 });
 const endPointer = (e) => {
   if (joy.active && e.pointerId === joy.id) { joy.active = false; joy.x = joy.y = 0; $('#joy-knob').style.transform = ''; $('#joy').classList.add('hidden'); }
@@ -157,8 +206,9 @@ function findSeat() {
 }
 function toggleSit() {
   if (me.seat) { standUp(); return; }
+  if (!me.onGround) return;
   const s = nearSeat || findSeat(); if (!s) return;
-  me.seat = s; me.pos.set(s.x, s.y - 0.5, s.z); me.ry = s.ry; me.speed = 0;
+  me.seat = s; me.pos.set(s.x, s.y - 0.5, s.z); me.ry = s.ry; me.speed = 0; me.vy = 0; me.jumping = false;
   seatView();
   $('#btn-sit').textContent = '站起來'; toast('已坐下 · 可用下方按鈕切換最佳視角或全螢幕');
   $('#seat-tools').classList.remove('hidden'); setMode('seat');
@@ -168,7 +218,17 @@ function standUp() {
   const s = me.seat; me.seat = null;
   setMode('normal'); $('#seat-tools').classList.add('hidden');
   cam.dist = cam.targetDist = 5; cam.pitch = 0.18;
-  me.pos.x -= Math.sin(s.ry) * 0.6; me.pos.z -= Math.cos(s.ry) * 0.6;
+  // 站起來：從椅子的碰撞方塊外面找一個空位（先試前方，再試兩側、後方，最後往外繞圈找）
+  const fx = Math.sin(s.ry), fz = Math.cos(s.ry), rx = Math.cos(s.ry), rz = -Math.sin(s.ry), y = s.y - 0.5;
+  const tries = [[0.62, 0], [0.8, 0], [0, 0.62], [0, -0.62], [0.62, 0.5], [0.62, -0.5], [-0.7, 0], [1.0, 0], [-0.95, 0], [0, 0.9], [0, -0.9]];
+  for (let r = 0.7; r <= 2.6; r += 0.3) for (let k = 0; k < 16; k++) { const a = k / 16 * Math.PI * 2; tries.push([Math.cos(a) * r, Math.sin(a) * r]); }
+  let spot = null;
+  for (const [f, sd] of tries) {
+    const x = s.x + fx * f + rx * sd, z = s.z + fz * f + rz * sd; const g = freeSpot(x, y, z);
+    if (g !== null) { spot = [x, g, z]; break; }
+  }
+  if (spot) me.pos.set(spot[0], spot[1], spot[2]); else { me.pos.x += fx * 0.62; me.pos.z += fz * 0.62; }
+  me.onGround = true; me.vy = 0;
   $('#btn-sit').textContent = '坐下'; sendNow();
 }
 $('#btn-sit').addEventListener('click', (e) => { e.stopPropagation(); toggleSit(); });
@@ -182,6 +242,8 @@ function seatView() {
 }
 function setMode(m) {
   viewMode = m;
+  if (!canLook()) unlockPointer();
+  document.body.classList.toggle('seated', m === 'seat' || m === 'best');
   $('#btn-best').textContent = m === 'best' ? '✕ 取消最佳視角' : '🎯 最佳視角';
   $('#btn-best').classList.toggle('on', m === 'best');
   document.body.classList.toggle('mode-full', m === 'full');
@@ -206,7 +268,7 @@ function exitFull() {
   try { if (document.fullscreenElement) document.exitFullscreen(); } catch (_) { }
 }
 document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && viewMode === 'full') exitFull(); });
-addEventListener('keydown', (e) => { if (e.code === 'Escape') exitFull(); });
+addEventListener('keydown', (e) => { if (e.code === 'Escape' && !typing(e)) exitFull(); }); // 滑鼠鎖定時 Esc 只會先放開滑鼠（瀏覽器行為），再按一次才離開全螢幕
 
 // ---------- UI ----------
 let toastT;
@@ -214,7 +276,7 @@ function toast(t, ms = 2600) { const el = $('#toast'); el.textContent = t; el.cl
 let soundOn = false;
 function setSound(on) { soundOn = on; screen.setSound(on); $('#btn-sound').textContent = on ? '🔊 聲音開啟' : '🔇 開啟聲音'; }
 $('#btn-sound').addEventListener('click', () => setSound(!soundOn));
-$('#btn-help').addEventListener('click', () => $('#help').classList.remove('hidden'));
+$('#btn-help').addEventListener('click', () => { unlockPointer(); $('#help').classList.remove('hidden'); });
 document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => $('#' + b.dataset.close).classList.add('hidden')));
 $('#btn-full').addEventListener('click', () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.(); });
 
@@ -230,6 +292,13 @@ document.querySelectorAll('canvas.preview').forEach((c) => {
   const cm = new THREE.PerspectiveCamera(32, 1, 0.1, 20); cm.position.set(0, 0.95, 3.6); cm.lookAt(0, 0.62, 0);
   previews.push({ r, s, a, cm, c });
 });
+// 名字：記在 localStorage，沒填就用「訪客####」
+const nameInput = $('#name-input');
+const cleanName = (v) => Array.from(String(v || '').replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff<>]/g, '').replace(/\s+/g, ' ').trim()).slice(0, 16).join('').trim();
+let defaultName = '訪客' + String(1000 + Math.floor(Math.random() * 9000));
+try { const saved = localStorage.getItem('hall-name'); if (saved) nameInput.value = cleanName(saved); const d = localStorage.getItem('hall-default-name'); if (d) defaultName = d; else localStorage.setItem('hall-default-name', defaultName); } catch (_) { }
+nameInput.placeholder = defaultName;
+nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); nameInput.blur(); if (chosen) $('#btn-enter').click(); } });
 let chosen = null;
 document.querySelectorAll('.choice').forEach(b => b.addEventListener('click', () => {
   chosen = b.dataset.color;
@@ -239,6 +308,8 @@ document.querySelectorAll('.choice').forEach(b => b.addEventListener('click', ()
 $('#btn-enter').addEventListener('click', () => {
   if (!chosen) return;
   me.color = chosen;
+  me.name = cleanName(nameInput.value) || defaultName; nameInput.value = cleanName(nameInput.value);
+  try { if (nameInput.value) localStorage.setItem('hall-name', nameInput.value); else localStorage.removeItem('hall-name'); } catch (_) { }
   setSound(true); // 使用者點擊時解除靜音（瀏覽器規定需要互動）
   status('連線中…');
   connect();
@@ -249,7 +320,7 @@ let ws, serverOffset = 0, lastSend = 0, lastSent = '';
 const remotes = new Map();
 function connect() {
   ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
-  ws.onopen = () => { ws.send(JSON.stringify({ t: 'hello', color: me.color })); ping(); };
+  ws.onopen = () => { ws.send(JSON.stringify({ t: 'hello', color: me.color, name: me.name })); ping(); };
   ws.onmessage = (ev) => {
     const m = JSON.parse(ev.data);
     switch (m.t) {
@@ -258,7 +329,9 @@ function connect() {
         $('#queue-text').textContent = `目前 ${m.online} / ${m.max} 人在線，你排在第 ${m.position} 位。`; break;
       case 's': onSnapshot(m); break;
       case 'join': addRemote(m.id, m.c, m); break;
-      case 'leave': { const r = remotes.get(m.id); if (r) { r.av.dispose(); remotes.delete(m.id); } break; }
+      case 'leave': removeRemote(m.id); break;
+      case 'chat': onChat(m); break;
+      case 'info': for (const o of m.p) { const r = remotes.get(o.id); if (r && r.needInfo) { removeRemote(o.id); addRemote(o.id, o.c, { ...r.last, n: o.n }); } } break;
       case 'video': screen.setState(m.video); break;
       case 'pong': { const rtt = performance.now() - m.c; serverOffset = m.s + rtt / 2 - Date.now(); break; }
     }
@@ -266,7 +339,7 @@ function connect() {
   ws.onclose = () => {
     if (!entered) { status('連線中斷，2 秒後重試…'); setTimeout(connect, 2000); return; }
     toast('連線中斷，正在重新連線…', 4000);
-    for (const r of remotes.values()) r.av.dispose(); remotes.clear();
+    for (const id of [...remotes.keys()]) removeRemote(id);
     setTimeout(connect, 2000);
   };
 }
@@ -274,7 +347,8 @@ function ping() { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'pi
 setInterval(ping, 20000);
 
 function onWelcome(m) {
-  me.id = m.id;
+  me.id = m.id; if (m.name) me.name = m.name;
+  for (const id of [...remotes.keys()]) removeRemote(id); // 重新連線：以伺服器的名單為準，不留下舊的角色
   $('#select').classList.add('hidden'); $('#queue').classList.add('hidden'); $('#hud').classList.remove('hidden');
   for (const p of previews) { p.r.dispose(); }
   previews.length = 0;
@@ -283,11 +357,14 @@ function onWelcome(m) {
   if (!entered) {
     entered = true;
     me.avatar = new Avatar(me.color); scene.add(me.avatar.root);
+    me.avatar.setName(me.name);
     me.pos.set(SPAWN.x + (Math.random() - 0.5) * 6, 0.15, SPAWN.z + (Math.random() - 0.5) * 1.5);
-    me.ry = Math.PI; cam.yaw = 0; cam.pitch = 0.12; cam.dist = cam.targetDist = 6;
+    me.ry = Math.PI; cam.yaw = 0; cam.pitch = 0.12; cam.dist = cam.targetDist = 6; me.camY = me.pos.y;
+    if (isTouch) $('#btn-jump').classList.remove('hidden');
     toast('歡迎！往前走進大門，大螢幕就在大廳盡頭', 4500);
     setTimeout(() => $('#hint').classList.add('fade'), 12000);
   }
+  else if (me.avatar.labels && me.avatar.labels.name !== me.name) me.avatar.setName(me.name);
   updateOnline(m.players.length + 1);
 }
 function updateOnline(n) { $('#online-n').textContent = n; }
@@ -295,22 +372,43 @@ function addRemote(id, color, p) {
   if (id === me.id || remotes.has(id)) return;
   const av = new Avatar(color); scene.add(av.root);
   av.root.position.set(p.x, p.y, p.z);
-  remotes.set(id, { av, tx: p.x, ty: p.y, tz: p.z, try: p.ry || 0, ry: p.ry || 0, a: p.a || 0, sitting: false });
+  if (p.n) av.setName(p.n);
+  const a = p.a || 0;
+  remotes.set(id, { av, name: p.n || '', color, tx: p.x, ty: p.y, tz: p.z, try: p.ry || 0, ry: p.ry || 0, a, sitting: a > 4.5 && a < 5.5, air: a >= 6, seen: performance.now(), needInfo: !p.n });
 }
+function removeRemote(id) { const r = remotes.get(id); if (r) { r.av.dispose(); remotes.delete(id); } }
+// 動作欄位 a：0～4 地面速度、5 坐著、6 以上 = 在空中（a - 6 為速度）
 function onSnapshot(m) {
   updateOnline(m.n);
+  const now = performance.now(), unknown = [];
   for (const [id, x, y, z, ry, a] of m.p) {
     if (id === me.id) continue;
     let r = remotes.get(id);
-    if (!r) { addRemote(id, 'pink', { x, y, z, ry }); r = remotes.get(id); }
-    r.tx = x; r.ty = y; r.tz = z; r.try = ry; r.a = a; r.sitting = a >= 5;
+    if (!r) { addRemote(id, 'pink', { x, y, z, ry, a }); r = remotes.get(id); unknown.push(id); }
+    r.tx = x; r.ty = y; r.tz = z; r.try = ry; r.a = a; r.sitting = a > 4.5 && a < 5.5; r.air = a >= 6; r.seen = now; r.last = { x, y, z, ry, a };
   }
+  if (unknown.length && ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'info', ids: unknown }));
 }
+// 好幾秒沒出現在快照裡的角色（伺服器已移除但 leave 訊息遺失等情況）直接清掉，避免留下幽靈
+function expireRemotes(now) {
+  for (const [id, r] of remotes) if (now - r.seen > 4000) removeRemote(id);
+}
+function onChat(m) {
+  chat.add(m);
+  const av = m.id === me.id ? me.avatar : remotes.get(m.id)?.av;
+  if (av) av.say(m.text);
+}
+const chat = initChat({
+  isTouch, toast,
+  send: (text) => { if (!ws || ws.readyState !== 1 || !me.id) return false; ws.send(JSON.stringify({ t: 'chat', text })); return true; },
+  onFocus: () => { clearKeys(); unlockPointer(); },
+});
 function sendNow() { lastSend = 0; }
 function netSend(now) {
   if (!ws || ws.readyState !== 1 || !entered) return;
   if (now - lastSend < 100) return;
-  const a = me.seat ? 5 : +me.speed.toFixed(2);
+  const sp = Math.min(3.9, +me.speed.toFixed(2));
+  const a = me.seat ? 5 : (me.jumping || me.airT > 0.2) ? +(6 + Math.min(sp, 3)).toFixed(2) : sp;
   const msg = JSON.stringify({ t: 'p', x: +me.pos.x.toFixed(2), y: +me.pos.y.toFixed(2), z: +me.pos.z.toFixed(2), ry: +me.ry.toFixed(2), a });
   if (msg === lastSent && now - lastSend < 2000) return;
   ws.send(msg); lastSent = msg; lastSend = now;
@@ -327,24 +425,35 @@ function updateMe(dt) {
   if (keys.KeyA || keys.ArrowLeft) ix -= 1; if (keys.KeyD || keys.ArrowRight) ix += 1;
   if (joy.active) { ix += joy.x; iz += joy.y; }
   const il = Math.hypot(ix, iz);
-  if (me.seat) { if (il > 0.3 && (viewMode === 'seat' || viewMode === 'normal')) standUp(); else { me.speed = 0; return; } }
+  if (me.seat) { if (il > 0.3 && (viewMode === 'seat' || viewMode === 'normal')) standUp(); else { me.speed = 0; jumpQueued = -1e9; return; } }
   const run = keys.ShiftLeft || keys.ShiftRight || (joy.active && il > 0.95);
+  // 跳躍：站著、走路、跑步時都可以（坐著、在空中不行；離地 0.1 秒內仍可起跳）
+  const nowMs = performance.now();
+  if (nowMs - jumpQueued < 160 && (me.onGround || me.airT < 0.1) && !me.jumping) {
+    me.vy = JUMP_V; me.onGround = false; me.jumping = true; me.airT = 0.1; jumpQueued = -1e9;
+  }
+  const airBoost = me.onGround ? 1 : 1.15; // 在空中時稍微往前衝
   let sp = 0;
   if (il > 0.05) {
     ix /= Math.max(1, il); iz /= Math.max(1, il);
     const sin = Math.sin(cam.yaw), cos = Math.cos(cam.yaw);
     const wx = ix * cos + iz * sin, wz = -ix * sin + iz * cos;
-    const speed = (run ? 6.2 : 3.2) * Math.min(1, il);
+    const speed = (run ? 6.2 : 3.2) * Math.min(1, il) * airBoost;
     me.pos.x += wx * speed * dt; me.pos.z += wz * speed * dt;
     const want = Math.atan2(wx, wz);
     let d = want - me.ry; d = Math.atan2(Math.sin(d), Math.cos(d)); me.ry += d * Math.min(1, dt * 12);
-    sp = speed / 3.2;
+    sp = speed / 3.2 / airBoost;
   }
   me.speed += (sp - me.speed) * Math.min(1, dt * 10);
   collide(me.pos);
   const g = groundAt(me.pos.x, me.pos.z, me.pos.y);
-  if (me.pos.y > g + 0.02) { me.vy -= 22 * dt; me.pos.y = Math.max(g, me.pos.y + me.vy * dt); if (me.pos.y === g) me.vy = 0; }
-  else { me.pos.y += (g - me.pos.y) * Math.min(1, dt * 18); me.vy = 0; }
+  // 地面：往上的台階（≤0.55m）直接踩上去，腳不會陷進台階；往下 0.46m 以內（樓梯、觀賽席、舞台）快速貼回地面；更高的落差才自由落下
+  if (me.vy > 0 || me.pos.y > g + (me.onGround ? 0.46 : 0.001)) {
+    me.vy -= GRAV * dt; me.pos.y += me.vy * dt;
+    if (me.pos.y <= g) { me.pos.y = g; me.vy = 0; me.onGround = true; me.jumping = false; me.airT = 0; }
+    else { me.onGround = false; me.airT += dt; }
+  } else { me.pos.y = me.pos.y > g ? Math.max(g, me.pos.y - Math.max(0.02, dt * 7)) : g; me.vy = 0; me.onGround = true; me.jumping = false; me.airT = 0; }
+  if (me.pos.y < -5) { me.pos.set(SPAWN.x, 0.15, SPAWN.z); me.vy = 0; } // 保險：萬一掉出世界
 }
 
 const fullPos = new THREE.Vector3(), bestPos = new THREE.Vector3();
@@ -368,7 +477,10 @@ function updateCamera(dt) {
   cam.dist += (cam.targetDist - cam.dist) * Math.min(1, dt * 8);
   const fp = cam.dist < 0.35;
   const eye = me.seat ? 1.25 : 1.32;
-  camTarget.set(me.pos.x, me.pos.y + eye + (fp ? 0.0 : 0.1), me.pos.z);
+  // 相機高度平滑跟隨（上下樓梯、跳躍時不會一格一格抖動）
+  if (Math.abs(me.pos.y - me.camY) > 2.5) me.camY = me.pos.y;
+  me.camY += (me.pos.y - me.camY) * Math.min(1, dt * (me.jumping ? 9 : 14));
+  camTarget.set(me.pos.x, me.camY + eye + (fp ? 0.0 : 0.1), me.pos.z);
   dirV.set(Math.sin(cam.yaw) * Math.cos(cam.pitch), Math.sin(cam.pitch), Math.cos(cam.yaw) * Math.cos(cam.pitch));
   let d = Math.max(cam.dist, 0.001);
   if (!fp) {
@@ -390,6 +502,12 @@ function updateCamera(dt) {
   } else camera.lookAt(camTarget);
   if (me.avatar) me.avatar.root.visible = cam.dist > 0.7;
 }
+// 名牌與泡泡：只更新看得到的角色
+function updateLabels(dt) {
+  const h = innerHeight;
+  if (me.avatar && me.avatar.root.visible) me.avatar.updateLabels(camera, dt, h);
+  for (const r of remotes.values()) if (r.av.root.visible) r.av.updateLabels(camera, dt, h);
+}
 
 function updateVolume() {
   if (!soundOn) return;
@@ -408,8 +526,11 @@ function frame() {
     updateMe(dt);
     me.avatar.root.position.set(me.pos.x, me.pos.y + (me.seat ? 0.55 : 0), me.pos.z);
     me.avatar.root.rotation.y = me.ry;
-    me.avatar.update(dt, me.speed, !!me.seat, t);
+    me.avatar.update(dt, me.speed, !!me.seat, t, me.jumping || me.airT > 0.2);
     updateCamera(dt);
+    updateLabels(dt);
+    expireRemotes(now);
+    $('#btn-jump').classList.toggle('hidden', !isTouch || !!me.seat);
     netSend(now);
     // 附近椅子提示
     if (!me.seat) {
@@ -429,10 +550,11 @@ function frame() {
     const p = r.av.root.position;
     const ox = p.x, oz = p.z;
     p.x += (r.tx - p.x) * k; p.z += (r.tz - p.z) * k;
-    const ty = r.ty + (r.sitting ? 0.55 : 0); p.y += (ty - p.y) * k;
+    const ty = r.ty + (r.sitting ? 0.55 : 0); p.y += (ty - p.y) * Math.min(1, dt * (r.air ? 14 : 10));
     let d = r.try - r.ry; d = Math.atan2(Math.sin(d), Math.cos(d)); r.ry += d * k; r.av.root.rotation.y = r.ry;
     const moved = Math.hypot(p.x - ox, p.z - oz) / Math.max(dt, 1e-3) / 3.2;
-    r.av.update(dt, r.sitting ? 0 : Math.max(Math.min(r.a, 2.2), moved * 0.5), r.sitting, t);
+    const ra = r.air ? r.a - 6 : r.sitting ? 0 : r.a;
+    r.av.update(dt, r.sitting ? 0 : Math.max(Math.min(ra, 2.2), moved * 0.5), r.sitting, t, r.air);
   }
   renderer.render(scene, camera);
   screen.render(camera);
@@ -454,4 +576,9 @@ addEventListener('resize', () => {
 status('');
 requestAnimationFrame(frame);
 setTimeout(() => $('#loading-veil').classList.add('gone'), 100);
-window.__hall = { me, cam, camera, scene, world, remotes, toggleSit, collide, groundAt };
+// 手機跳躍按鈕
+const jumpBtn = $('#btn-jump');
+jumpBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); jumpQueued = performance.now(); jumpBtn.classList.add('press'); });
+for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) jumpBtn.addEventListener(ev, () => jumpBtn.classList.remove('press'));
+jumpBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+window.__hall = { me, cam, camera, scene, world, remotes, toggleSit, collide, groundAt, freeSpot, chat, jump: () => { jumpQueued = performance.now(); }, get ws() { return ws; }, get viewMode() { return viewMode; }, enterFull, exitFull };

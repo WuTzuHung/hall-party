@@ -16,7 +16,7 @@ export class BigScreen {
     el.style.cssText = `width:${PX_W}px;height:${PX_H}px;background:#000;overflow:hidden;`;
     const idle = document.createElement('div');
     idle.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 40%,#3a1f66,#0b0718 70%);color:#f3e6c4;font-family:Cinzel,serif;text-align:center';
-    idle.innerHTML = '<div style="width:420px;height:1px;background:linear-gradient(90deg,transparent,#c9a24a,transparent);margin-bottom:34px"></div><div style="font-size:84px;font-weight:600;letter-spacing:28px;padding-left:28px;color:#ecd9a8;text-shadow:0 2px 0 rgba(0,0,0,.35)">GEN.G<span style="font-size:34px;letter-spacing:10px;margin:0 34px;vertical-align:middle;color:#b8913f">VS</span>BLG</div><div style="width:420px;height:1px;background:linear-gradient(90deg,transparent,#c9a24a,transparent);margin-top:34px"></div>';
+    idle.innerHTML = '<div style="width:420px;height:1px;background:linear-gradient(90deg,transparent,#c9a24a,transparent);margin-bottom:34px"></div><div style="font-size:84px;font-weight:600;letter-spacing:28px;padding-left:28px;color:#ecd9a8;text-shadow:0 2px 0 rgba(0,0,0,.35)">GENG<span style="font-size:34px;letter-spacing:10px;margin:0 34px;vertical-align:middle;color:#b8913f">VS</span>BLG</div><div style="width:420px;height:1px;background:linear-gradient(90deg,transparent,#c9a24a,transparent);margin-top:34px"></div>';
     el.style.position = 'relative'; el.appendChild(idle);
     const holder = document.createElement('div'); holder.id = 'yt-player'; holder.style.cssText = 'position:absolute;inset:0';
     el.appendChild(holder);

@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>光之殿堂 · GEN.G vs BLG 決賽觀賽派對</title>
-<meta name="description" content="在紐約光之殿堂 Hall des Lumières 的 3D 虛擬空間，和大家一起看 GEN.G vs BLG 決賽。">
+<title>光之殿堂 · GENG vs BLG 決賽觀賽派對</title>
+<meta name="description" content="在紐約光之殿堂 Hall des Lumières 的 3D 虛擬空間，和大家一起看 GENG vs BLG 決賽。">
 <meta name="theme-color" content="#120d22">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
@@ -21,7 +21,7 @@
 <!-- HUD -->
 <div id="hud" class="hidden">
   <div class="hud-top">
-    <div class="brand"><span class="brand-en">HALL DES LUMIÈRES</span><span class="brand-zh">光之殿堂 · GEN.G vs BLG 決賽觀賽派對</span></div>
+    <div class="brand"><span class="brand-en">HALL DES LUMIÈRES</span><span class="brand-zh">光之殿堂 · GENG vs BLG 決賽觀賽派對</span></div>
     <div class="hud-right">
       <div class="pill" id="online"><span class="dot"></span><span id="online-n">1</span> 人在線</div>
       <button class="pill btn" id="btn-sound" aria-label="聲音">🔇 開啟聲音</button>
@@ -37,18 +37,29 @@
   </div>
   <button id="full-exit" class="hidden">✕ 離開全螢幕</button>
   <div id="joy" class="hidden"><div id="joy-knob"></div></div>
+  <button id="btn-jump" class="hidden" aria-label="跳躍"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 4l7 7.5h-4.2V20H9.2v-8.5H5z" fill="currentColor"/></svg><span>跳</span></button>
+  <div id="crosshair"></div>
+  <div id="chat-feed" aria-live="polite"></div>
+  <div id="chat">
+    <button id="chat-toggle" type="button" aria-label="開啟聊天"><svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.2 3.6c-.5.4-1.3.1-1.3-.6V16A2.5 2.5 0 0 1 4 13.5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg></button>
+    <form id="chat-form" autocomplete="off">
+      <input id="chat-input" type="text" maxlength="120" placeholder="說點什麼… Enter 送出" enterkeyhint="send" spellcheck="false" aria-label="聊天訊息">
+      <button id="chat-min" type="button" aria-label="縮小聊天"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M6 12h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+    </form>
+  </div>
   <div id="hint">
-    <div class="desk"><b>W A S D</b> / 方向鍵 移動 · <b>Shift</b> 跑步 · <b>拖曳滑鼠</b> 轉視角 · <b>滾輪</b> 拉近拉遠 · <b>E</b> 坐下/站起</div>
-    <div class="mob">左下搖桿移動 · 右側滑動轉視角 · 雙指縮放拉近</div>
+    <div class="desk"><b>W A S D</b> 移動 · <b>Shift</b> 跑步 · <b>空白鍵</b> 跳躍 · <b>點畫面</b> 鎖定滑鼠轉視角，<b>Esc</b> 放開 · <b>滾輪</b> 拉近拉遠 · <b>E</b> 坐下/站起 · <b>Enter</b> 聊天</div>
+    <div class="mob">左下搖桿移動 · 右側滑動轉視角 · 雙指縮放 · 右下按鈕跳躍</div>
   </div>
 </div>
 
 <!-- 選角畫面 -->
 <div id="select" class="overlay">
   <div class="panel">
-    <div class="kicker">GEN.G VS BLG · WORLDS FINAL WATCH PARTY</div>
+    <div class="kicker">GENG VS BLG · WORLDS FINAL WATCH PARTY</div>
     <h1><span>HALL DES LUMIÈRES</span><small>光之殿堂 · 紐約曼哈頓 49 Chambers St.</small></h1>
-    <p class="lead">選一個你的顏色，走進殿堂，和大家一起在大螢幕前看決賽。</p>
+    <p class="lead">取個名字、選一個你的顏色，走進殿堂，和大家一起在大螢幕前看決賽。</p>
+    <label class="name-field"><span class="name-label">你的名字</span><input id="name-input" type="text" maxlength="16" autocomplete="nickname" enterkeyhint="done" spellcheck="false" aria-label="你的名字"></label>
     <div class="choices">
       <button class="choice" data-color="pink"><canvas class="preview" data-color="pink"></canvas><span>粉紅</span></button>
       <button class="choice" data-color="blue"><canvas class="preview" data-color="blue"></canvas><span>天藍</span></button>
@@ -72,7 +83,9 @@
     <h2>操作說明</h2>
     <ul class="help-list">
       <li><b>移動</b>：W A S D 或方向鍵（按住 Shift 跑步）；手機用左下搖桿</li>
-      <li><b>轉視角</b>：按住滑鼠拖曳；手機在右半邊滑動</li>
+      <li><b>跳躍</b>：空白鍵（站著、走路、跑步時都可以，空中會稍微往前衝）；手機點右下角「跳」</li>
+      <li><b>轉視角</b>：點一下畫面鎖定滑鼠，直接移動滑鼠就能轉視角，按 Esc 放開；也可以按住滑鼠拖曳；手機在右半邊滑動</li>
+      <li><b>聊天</b>：按 Enter（或 / 、T）開始打字，Enter 送出、Esc 取消；訊息會出現在你頭上和右上角，不會被保存。手機點左下角的對話圖示</li>
       <li><b>拉近 / 拉遠</b>：滑鼠滾輪；手機雙指縮放。拉到最近就是第一人稱，可以近距離看建築細節</li>
       <li><b>坐下 / 站起</b>：走到椅子旁按 E 或點「坐下」，畫面會自動從座位看向大螢幕；再按一次或移動就會站起來</li><li><b>最佳視角</b>：坐下後點「🎯 最佳視角」跳到正中央，滾輪或雙指前後拉，再點一次取消</li><li><b>全螢幕觀看</b>：坐下後點「⛶ 全螢幕觀看」，大螢幕放到最大，按 Esc 或右上角離開</li>
       <li><b>聲音</b>：點右上角「開啟聲音」，走進大廳聲音會變大</li>
