@@ -18,7 +18,7 @@ const allowed = ['幹嘛', '幹部', '才幹', '能幹', '骨幹', '幹活', '�
   'IG 2:0 贏了', 'IG vs BLG', 'id 是 Chovy', 'IG Chovy', 'ig abc', 'ig x', 'dc hi',
   '幹掉對面中路', '這操控好強', '操盤手', '主幹道', '樹幹', '幹線', '幹勁', '幹練', '實幹', '苦幹', '精幹',
   '若干', '相干', '干貝', '操縱', '操練', '操守', '情操', '早操', '出操', '干',
-  'Essex', 'Sussex', 'shitake', 'sexton', 'nudes', 'Scunthorpe', 'Ｅｓｓｅｘ', 'Es\u200bsex'];
+  'Essex', 'Sussex', 'Scunthorpe', 'Ｅｓｓｅｘ', 'Es\u200bsex', 'IG 2018 冠軍', 'IG 2018年拿冠軍'];
 const contacts = [
   'a@example.com', 'a＠example.com', 'user at example dot com', 'user 小老鼠 example 點com', 'user＠example點com',
   'https://example.com', 'http://example.invalid', 'www.example.com', 'example.net', 'example.org', 'example.tw', 'example.jp',
@@ -28,7 +28,7 @@ const contacts = [
   '１２３４５６７８', '12345678', '09\u200b12-345-678', 'ig abc_123', 'instagram: player.123', '哀居 abc123',
   'IG: abc_123', 'dc是 hall#1234', '我的賴 abc123', '@abc', '@a_b', 'dc: player123', 'discord player123', 'discord.gg/hallparty', '玩家#1234', 'player#1234',
   'l.i.n.e: a b c d', 'L Ｉ N E ID：a.b.c.d', 'i.g:player', 'd i s c o r d：player', 'example。com',
-  'IG：player', 'instagram帳號 player', '哀居@player', 'dc abc_123', 'id abc_123',
+  'IG：player', 'instagram帳號 player', '哀居@player', 'dc abc_123', 'id abc_123', 'IG: 12345678', 'IG: 2018',
 ];
 
 for (const word of banned) test('遮字：' + word, () => {
@@ -53,10 +53,15 @@ test('英文邊界依原文判斷，句中英文與拆字仍遮罩', () => {
       assert.equal(filterChat('看！' + variant + ' 好扯').text, '看！' + variant.replace(/[a-z]/gi, '＊') + ' 好扯');
     }
     assert.equal(filterChat('a' + word).text, 'a' + word);
-    assert.equal(filterChat(word + 'z').text, word + 'z');
+    assert.equal(filterChat(word + 'z').text, '＊'.repeat(word.length) + 'z');
   }
   assert.equal(filterChat('操控好強，操！幹掉對手，幹你娘').text, '操控好強，＊！幹掉對手，＊＊＊');
 });
+
+for (const [text, masked] of [
+  ['fucking', '＊＊＊＊ing'], ['fuckkk', '＊＊＊＊kk'], ['shitty', '＊＊＊＊ty'], ['bitches', '＊＊＊＊＊es'],
+  ['sexy', '＊＊＊y'], ['shitake', '＊＊＊＊ake'], ['sexton', '＊＊＊ton'], ['nudes', '＊＊＊＊s'],
+]) test('英文變形遮字：' + text, () => assert.deepEqual(filterChat(text), { ok: true, text: masked, reason: null }));
 
 test('重複過濾不改變已遮字結果', () => {
   for (const word of banned) {

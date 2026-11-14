@@ -34,7 +34,8 @@
       if (handle.length < 4) continue;
       // 泛用 ID 也用來討論選手；純字母的選手名稱不視為聯絡帳號。
       const genericId = label.replace(/[^a-z]/g, '') === 'id';
-      if ((!genericId && connector) || /[0-9_.]/.test(handle)) return true;
+      const accountLike = /[a-z]/.test(handle) && /[0-9_.]/.test(handle);
+      if (connector ? (!genericId || /[0-9_.]/.test(handle)) : accountLike) return true;
     }
     return false;
   }
@@ -70,10 +71,9 @@
       for (let i = normalized.indexOf(word); i !== -1; i = normalized.indexOf(word, i + 1)) {
         if (allowed.some(([a, b]) => i >= a && i + word.length <= b)) continue;
         if (/^[a-z]+$/.test(word)) {
-          const start = positions[i], end = positions[i + word.length - 1];
+          const start = positions[i];
           const before = original.slice(0, start).join('').normalize('NFKC').replace(/\p{Cf}/gu, '');
-          const after = original.slice(end + 1).join('').normalize('NFKC').replace(/\p{Cf}/gu, '');
-          if (/[a-z]$/i.test(before) || /^[a-z]/i.test(after)) continue;
+          if (/[a-z]$/i.test(before)) continue;
         }
         for (let j = i; j < i + word.length; j++) masked.add(positions[j]);
       }
