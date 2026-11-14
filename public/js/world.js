@@ -848,8 +848,9 @@ function buildInterior(scene, anim, q, renderer) {
   const rugs = [[0, -16.6, 5, 4], [-11.1, -35.5, 3.6, 5.6], [11.1, -35.5, 3.6, 5.6], [-11.1, -49.5, 3.6, 5.6], [11.1, -49.5, 3.6, 5.6], [0, -35.5, 5.2, 16]];
   for (const [x, z, w, d] of rugs) { const r = new THREE.Mesh(new THREE.PlaneGeometry(w, d), rugMat); r.rotation.x = -Math.PI / 2; r.position.set(x, 0.02, z); scene.add(r); projMeshes.push(r); }
   onLights((e) => {
-    const m = 1 - e; proj.uniforms.uMix.value = m; rugMat.uniforms.uMix.value = m;
-    for (const o of projMeshes) o.visible = m > 0.004;
+    // 開燈時也保留牆面花卉投影與地面光毯（使用者偏好原本的牆面），只有略為柔和
+    proj.uniforms.uMix.value = lerp(1, 0.94, e); rugMat.uniforms.uMix.value = lerp(1, 0.85, e);
+    for (const o of projMeshes) o.visible = true;
   });
   // 開燈時看得到的側牆分格：每個開間上下各一個石膏線框（比投影面退後，關燈時被投影蓋住）
   {

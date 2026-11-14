@@ -63,8 +63,8 @@ export function buildTrophy(renderer) {
   // 銘牌（四面各一塊，深色亮面，細刻線看不清內容）
   const tilt = Math.atan2(0.214 - 0.18, 0.2 - 0.034);
   for (let k = 0; k < 4; k++) {
-    const g = new THREE.PlaneGeometry(0.25, 0.118); xf(g, { rx: -tilt }); xf(g, { z: 0.197 + 0.0035, y: 0.117 }); xf(g, { ry: k * Math.PI / 2 }); add(g, 'plaque');
-    const fr = plate([[0, -0.066], [0.132, -0.066], [0.132, 0.066], [0, 0.066]], 0.0025, 0.001); xf(fr, { rx: -tilt }); xf(fr, { z: 0.1965, y: 0.117 }); xf(fr, { ry: k * Math.PI / 2 }); add(fr, 'silver');
+    const g = new THREE.PlaneGeometry(0.25, 0.118); xf(g, { rx: -tilt }); xf(g, { z: 0.197 + 0.011, y: 0.117 }); xf(g, { ry: k * Math.PI / 2 }); add(g, 'plaque'); // 與底板保持 4mm 以上，遠看不閃爍
+    const fr = plate([[0, -0.066], [0.132, -0.066], [0.132, 0.066], [0, 0.066]], 0.008, 0.001); xf(fr, { rx: -tilt }); xf(fr, { z: 0.195, y: 0.117 }); xf(fr, { ry: k * Math.PI / 2 }); add(fr, 'silver');
   }
   // ---------- 凸緣（y 0.232 ~ 0.272）----------
   add(loft([oct(0.232, 0.196, 0.036), oct(0.24, 0.205, 0.038), oct(0.26, 0.205, 0.038), oct(0.272, 0.192, 0.034)], true), 'silver');
@@ -137,7 +137,7 @@ export function buildTrophy(renderer) {
     silver: new THREE.MeshStandardMaterial({ color: 0xf4f6fa, metalness: 1, roughness: 0.07, envMap: env }),
     gold: new THREE.MeshStandardMaterial({ color: 0xf0cc86, metalness: 1, roughness: 0.16, envMap: env }),
     gem: new THREE.MeshStandardMaterial({ color: 0x0c2fc4, metalness: 0.35, roughness: 0.03, envMap: env, emissive: 0x0b36e0, emissiveIntensity: 0.6 }),
-    plaque: new THREE.MeshStandardMaterial({ map: T.plaque(), metalness: 0.7, roughness: 0.14, envMap: env }),
+    plaque: new THREE.MeshStandardMaterial({ map: T.plaque(), metalness: 0.7, roughness: 0.14, envMap: env, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }),
   };
   const group = new THREE.Group(); let tris = 0;
   for (const k of Object.keys(parts)) { const g = mergeGeometries(parts[k], false); tris += g.attributes.position.count / 3; const m = new THREE.Mesh(g, mats[k]); group.add(m); }
