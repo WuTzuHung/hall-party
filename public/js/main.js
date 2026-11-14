@@ -304,8 +304,14 @@ addEventListener('keydown', (e) => { if (e.code === 'Escape' && !typing(e)) exit
 let toastT;
 function toast(t, ms = 2600) { const el = $('#toast'); el.textContent = t; el.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('show'), ms); }
 let soundOn = false;
-function setSound(on) { soundOn = on; screen.setSound(on); $('#btn-sound').textContent = on ? '🔊 聲音開啟' : '🔇 開啟聲音'; }
-$('#btn-sound').addEventListener('click', () => setSound(!soundOn));
+function updateSoundButton() {
+  const active = screen.isSoundOn(), btn = $('#btn-sound');
+  btn.textContent = active ? '🔊 聲音開啟' : soundOn ? '🔇 點一下開啟聲音' : '🔇 開啟聲音';
+  btn.setAttribute('aria-pressed', String(active));
+}
+screen.onSoundChange = updateSoundButton;
+function setSound(on) { soundOn = on; if (on) updateVolume(); screen.setSound(on); updateSoundButton(); }
+$('#btn-sound').addEventListener('click', () => setSound(!screen.isSoundOn()));
 $('#btn-help').addEventListener('click', () => { unlockPointer(); $('#help').classList.remove('hidden'); });
 document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => $('#' + b.dataset.close).classList.add('hidden')));
 $('#btn-full').addEventListener('click', () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.(); });
@@ -507,8 +513,9 @@ function restoreFrom(sn) {
   // 瀏覽器規定要有使用者互動才能開聲音：點一下畫面或按任意鍵就恢復
   if (sn.sound) {
     soundWanted = true; toast('歡迎回來 · 點一下畫面即可恢復聲音', 4500);
-    const on = (e) => { soundWanted = false; if (!soundOn && !kicked && !(e.target.closest && e.target.closest('#btn-sound'))) setSound(true); removeEventListener('pointerdown', on, true); removeEventListener('keydown', on, true); };
-    addEventListener('pointerdown', on, true); addEventListener('keydown', on, true);
+    const on = (e) => { soundWanted = false; if (!screen.isSoundOn() && !kicked && !(e.target.closest && e.target.closest('#btn-sound'))) setSound(true); removeEventListener('click', on, true); removeEventListener('keydown', on, true); };
+    // Android 的 pointerdown 尚未完成點擊手勢；使用 click 才能確實解鎖媒體。
+    addEventListener('click', on, true); addEventListener('keydown', on, true);
   } else toast('歡迎回來', 2500);
 }
 
