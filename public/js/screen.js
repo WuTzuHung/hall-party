@@ -96,13 +96,20 @@ export class BigScreen {
         onReady: () => {
           this.ready = true; try { this.player.getIframe().style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:0'; } catch (_) { }
           // 入場可能早於 iframe 就緒；先靜音播放，之後由聲音按鈕的手勢解鎖。
+          this.disableCaptions();
           this.player.mute(); this.applyVolume(); this.apply(true); this.updateSound();
         },
+        onApiChange: () => this.disableCaptions(),
         onStateChange: (e) => this.onPlayerState(e.data),
         onError: (e) => { const v = this.state; if (v) this.report({ t: 'err', seq: v.seq, id: v.id, code: e.data }); },
         onAutoplayBlocked: () => { this.player.mute(); this.updateSound(); },
       },
     });
+  }
+  disableCaptions() {
+    // 字幕模組會非同步載入，換片也可能重新啟用；不依賴觀眾的 YouTube 字幕偏好。
+    if (!this.ready) return;
+    try { this.player.unloadModule('captions'); } catch (_) { }
   }
   report(m) { try { this.onReport && this.onReport(m); } catch (_) { } }
   isSoundOn() {
@@ -112,6 +119,7 @@ export class BigScreen {
   onPlayerState(s) {
     this.updateSound();
     const v = this.state; if (!v || !this.ready) return;
+    if (s === 1) this.disableCaptions();
     let cur = ''; try { cur = this.player.getVideoData()?.video_id; } catch (_) { }
     if (cur !== v.id) return;
     if (s === 1 && !v.live && !this.reported[v.seq]) {
@@ -210,7 +218,7 @@ export class BigScreen {
     if (v.playing && p.getPlayerState() !== 1) p.playVideo();
     if (!v.playing && p.getPlayerState() === 1) p.pauseVideo();
   }
-  tick() { if (this.ready) { this.apply(false); this.updateSound(); } }
+  tick() { if (this.ready) { this.disableCaptions(); this.apply(false); this.updateSound(); } }
   setSound(on) {
     this.muted = !on; this.applyVolume();
     if (on && this.ready) {
