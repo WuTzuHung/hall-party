@@ -304,9 +304,17 @@ addEventListener('keydown', (e) => { if (e.code === 'Escape' && !typing(e)) exit
 let toastT;
 function toast(t, ms = 2600) { const el = $('#toast'); el.textContent = t; el.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('show'), ms); }
 let soundOn = false;
+// 個人音量（0–100，只影響自己，記在這台裝置上）；與大廳內外的分區音量相乘
+let userVol = 80;
+try { const sv = Number(localStorage.getItem('hall-volume')); if (localStorage.getItem('hall-volume') !== null && sv >= 0 && sv <= 100) userVol = sv; } catch (_) { }
+function showVol() { const el = $('#vol'); el.value = userVol; el.style.setProperty('--v', userVol + '%'); $('#vol-n').textContent = Math.round(userVol); }
+$('#vol').addEventListener('input', (e) => { userVol = Number(e.target.value); showVol(); try { localStorage.setItem('hall-volume', String(userVol)); } catch (_) { } updateVolume(); });
+$('#vol').addEventListener('change', (e) => e.target.blur()); // 放開後把焦點還給場景，方向鍵才不會去動拉桿
+showVol();
 function updateSoundButton() {
   const active = screen.isSoundOn(), btn = $('#btn-sound');
-  btn.textContent = active ? '🔊 聲音開啟' : soundOn ? '🔇 點一下開啟聲音' : '🔇 開啟聲音';
+  $('#vol-pill').classList.toggle('hidden', !soundOn);
+  btn.textContent = active ? (innerWidth <= 560 ? '🔊' : '🔊 聲音開啟') : soundOn ? '🔇 點一下開啟聲音' : '🔇 開啟聲音';
   btn.setAttribute('aria-pressed', String(active));
 }
 screen.onSoundChange = updateSoundButton;
@@ -697,7 +705,7 @@ function updateVolume() {
   if (z < -6.3 && Math.abs(x) < 14.5) v = 100 - Math.max(0, (-z - 40)) * 0; // 大廳內
   else if (z < 0) v = 70;
   else v = Math.max(8, 45 - Math.hypot(x, z) * 2.2);
-  screen.setVolume(v);
+  screen.setVolume(v * userVol / 100);
 }
 
 function frame() {

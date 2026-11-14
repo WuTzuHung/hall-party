@@ -6,6 +6,15 @@ import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer
 import { SCREEN } from './world.js';
 
 const PX_W = 1280, PX_H = 720;
+// YouTube 依播放器本身的像素大小挑畫質：1280×720 的播放器最高只會給 720p，放大到全螢幕就糊了。
+// 所以讓 iframe 內部以 Q 倍尺寸排版（1920×1080 或 2560×1440），再用 transform 縮回原本的版面大小，
+// 這樣 YouTube 會給 1080p／1440p，畫面位置與卡片排版都不變。
+const Q = (() => {
+  try {
+    const big = Math.max(window.screen.width, window.screen.height) * (window.devicePixelRatio || 1) >= 2500;
+    return big && !window.matchMedia('(pointer: coarse)').matches ? 2 : 1.5;
+  } catch (_) { return 1.5; }
+})();
 const RULE = (w, m) => `<div style="width:${w}px;height:1px;background:linear-gradient(90deg,transparent,#c9a24a,transparent);${m}"></div>`;
 // 3D 場景裡不放中文：標題含中日韓文字時改顯示曲目編號
 const latinOnly = (s) => (s && !/[\u2e80-\u9fff\uac00-\ud7af\uf900-\ufaff\uff00-\uffef]/.test(s) ? s : '');
@@ -94,7 +103,7 @@ export class BigScreen {
       playerVars: { autoplay: 1, mute: 1, controls: 0, disablekb: 1, modestbranding: 1, rel: 0, playsinline: 1, iv_load_policy: 3, fs: 0, origin: location.origin },
       events: {
         onReady: () => {
-          this.ready = true; try { this.player.getIframe().style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:0'; } catch (_) { }
+          this.ready = true; try { this.player.getIframe().style.cssText = `position:absolute;left:0;top:0;width:${Q * 100}%;height:${Q * 100}%;border:0;transform:scale(${1 / Q});transform-origin:0 0`; } catch (_) { }
           // 入場可能早於 iframe 就緒；先靜音播放，之後由聲音按鈕的手勢解鎖。
           this.disableCaptions();
           this.player.mute(); this.applyVolume(); this.apply(true); this.updateSound();

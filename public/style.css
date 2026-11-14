@@ -264,3 +264,12 @@ body.touch #ad-login input{font-size:16px}
   body:not(.touch):not(.locked):has(#hud:not(.hidden)) :is(button:not(:disabled),a[href],[role=button]){cursor:var(--cursor-gold-pointer)}
   body:not(.touch):not(.locked):has(#hud:not(.hidden)) :is(input,textarea,[contenteditable=true]){cursor:text}
 }
+
+/* ---- 個人音量拉桿（開啟聲音後出現在聲音按鈕旁） ---- */
+#vol-pill{padding:6px 12px;gap:8px;cursor:default}
+#vol{-webkit-appearance:none;appearance:none;width:92px;height:4px;border-radius:999px;background:linear-gradient(90deg,var(--gold) var(--v,80%),rgba(255,255,255,.2) var(--v,80%));outline:none;margin:0;cursor:pointer;touch-action:none}
+#vol::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:15px;height:15px;border-radius:50%;background:linear-gradient(180deg,#f6dc95,#d4a748);border:0;box-shadow:0 1px 5px rgba(0,0,0,.5)}
+#vol::-moz-range-thumb{width:15px;height:15px;border-radius:50%;background:linear-gradient(180deg,#f6dc95,#d4a748);border:0;box-shadow:0 1px 5px rgba(0,0,0,.5)}
+#vol-n{min-width:2.1em;text-align:right;font-variant-numeric:tabular-nums;font-size:12px;color:var(--muted)}
+body.touch #vol{height:6px;width:84px} body.touch #vol::-webkit-slider-thumb{width:20px;height:20px}
+@media (max-width:560px){ #vol{width:70px} #vol-n{display:none} #vol-pill{padding:8px 10px} }
