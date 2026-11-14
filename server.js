@@ -57,7 +57,8 @@ const defaults = {
     dur: 0, seq: 1,
   },
   music: {
-    list: [], // [{ id, title, live?, dur? }]
+    // 預設大廳歌單（重新部署後免費方案資料會清空，所以寫在程式裡）
+    list: [{ id: 'HYsz1hP0BFo', title: '' }, { id: 'C3GouGa0noM', title: '' }, { id: '5FrhtahQiRc', title: '' }], // [{ id, title, live?, dur? }]
     index: -1, loop: 'all', shuffle: false, display: 'card',
     playing: true, startedAt: Date.now(), pausedAt: 0, seq: 0,
   },
@@ -71,6 +72,7 @@ try {
   if (state.mode !== 'match') state.mode = 'music';
   if (state.music.index >= state.music.list.length) state.music.index = state.music.list.length ? 0 : -1;
 } catch (_) { /* 第一次啟動 */ }
+if (state.mode === 'music' && state.music.list.length && state.music.index < 0) startTrack(0);
 let saveT = null;
 function saveNow() {
   clearTimeout(saveT); saveT = null;
