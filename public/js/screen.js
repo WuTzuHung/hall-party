@@ -76,6 +76,7 @@ export class BigScreen {
     this.muted = true; this.volume = 100; this.fade = 1; this.fadeTimer = null; this.transId = 0;
     this.reported = {}; // seq -> 已回報片長
     this.onReport = null; // (msg) => 送給伺服器 { t:'dur'|'ended'|'err', seq, id, ... }
+    this.onSoundChange = null; // 按鈕必須依播放器確認的狀態顯示，不能只反映使用者意圖
     setInterval(() => this.updateCountdown(), 1000);
     this.loadAPI();
   }
@@ -85,22 +86,31 @@ export class BigScreen {
   }
   createPlayer() {
     const v = this.state;
+    // API 可能比入場的媒體同步先到；明確傳入 undefined 會讓 YT.Player 直接拋例外。
+    if (this.player || !v || !window.YT?.Player) return;
     this.player = new YT.Player('yt-player', {
       width: PX_W, height: PX_H,
-      videoId: v ? v.id : undefined,
+      videoId: v.id,
       playerVars: { autoplay: 1, mute: 1, controls: 0, disablekb: 1, modestbranding: 1, rel: 0, playsinline: 1, iv_load_policy: 3, fs: 0, origin: location.origin },
       events: {
         onReady: () => {
           this.ready = true; try { this.player.getIframe().style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:0'; } catch (_) { }
-          this.player.mute(); this.applyVolume(); this.apply(true);
+          // 入場可能早於 iframe 就緒；先靜音播放，之後由聲音按鈕的手勢解鎖。
+          this.player.mute(); this.applyVolume(); this.apply(true); this.updateSound();
         },
         onStateChange: (e) => this.onPlayerState(e.data),
         onError: (e) => { const v = this.state; if (v) this.report({ t: 'err', seq: v.seq, id: v.id, code: e.data }); },
+        onAutoplayBlocked: () => { this.player.mute(); this.updateSound(); },
       },
     });
   }
   report(m) { try { this.onReport && this.onReport(m); } catch (_) { } }
+  isSoundOn() {
+    try { return this.ready && !this.muted && !this.player.isMuted() && (this.player.getPlayerState() === 1 || this.state?.playing === false); } catch (_) { return false; }
+  }
+  updateSound() { this.onSoundChange && this.onSoundChange(this.isSoundOn()); }
   onPlayerState(s) {
+    this.updateSound();
     const v = this.state; if (!v || !this.ready) return;
     let cur = ''; try { cur = this.player.getVideoData()?.video_id; } catch (_) { }
     if (cur !== v.id) return;
@@ -124,6 +134,7 @@ export class BigScreen {
     const changed = !prev !== !want || (prev && want && (prev.seq !== want.seq || prev.id !== want.id));
     this.state = want ? { ...want, receivedAt: performance.now() } : null;
     this.updateOverlay();
+    if (!this.player) this.createPlayer();
     if (!this.ready) return;
     if (changed) this.transition(); else this.apply(false);
   }
@@ -178,7 +189,8 @@ export class BigScreen {
   applyVolume() {
     if (!this.ready) return;
     const v = Math.round(this.volume * this.fade);
-    try { if (this.muted) this.player.mute(); else { this.player.unMute(); this.player.setVolume(v); } } catch (_) { }
+    // 淡入與分區音量更新不可在手勢之外解除靜音。
+    try { this.player.setVolume(v); if (this.muted) this.player.mute(); } catch (_) { }
   }
   apply(force) {
     const v = this.state; if (!this.ready) return;
@@ -198,8 +210,18 @@ export class BigScreen {
     if (v.playing && p.getPlayerState() !== 1) p.playVideo();
     if (!v.playing && p.getPlayerState() === 1) p.pauseVideo();
   }
-  tick() { if (this.ready) this.apply(false); }
-  setSound(on) { this.muted = !on; this.applyVolume(); }
+  tick() { if (this.ready) { this.apply(false); this.updateSound(); } }
+  setSound(on) {
+    this.muted = !on; this.applyVolume();
+    if (on && this.ready) {
+      // 直接在 click／keydown 手勢內呼叫，不能延到同步 tick 或淡入計時器。
+      this.player.unMute();
+      if (this.state?.playing) this.player.playVideo();
+    }
+    this.updateSound();
+    // API 的靜音快取要等 iframe 回覆，已在播放時不一定再發 state change。
+    setTimeout(() => this.updateSound(), 250);
+  }
   setVolume(v) { v = Math.round(v); if (v === this.volume) return; this.volume = v; if (!this.fadeTimer) this.applyVolume(); }
   render(camera) { this.cssRenderer.render(this.cssScene, camera); }
   setSize(w, h) { this.cssRenderer.setSize(w, h); }
