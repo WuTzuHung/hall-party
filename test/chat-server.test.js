@@ -67,7 +67,7 @@ test('實際 HTTP／WebSocket：繞過前端仍遮字、擋聯絡資訊、清理
   await barrier(sender);
   assert.equal(sender.messages.find(m => m.t === 'chat').text, '＊ ＊ ＊ ＊.＊.＊.＊！');
 
-  for (const text of ['a@example.com', '加賴 abcd', 'example.com', '0912-345-678', 'ig player123', '玩家#1234']) {
+  for (const text of ['a@example.com', '加賴 abcd', 'example.com', '0912-345-678', 'ig player123', '玩家#1234', 'IG: abc_123', 'dc是 hall#1234', '我的賴 abc123']) {
     const client = await connect('測試者'); // 每例獨立連線，避免限流遮蔽過濾結果
     const before = observer.messages.filter(m => m.t === 'chat').length;
     client.send(JSON.stringify({ t: 'chat', text }));
@@ -75,9 +75,13 @@ test('實際 HTTP／WebSocket：繞過前端仍遮字、擋聯絡資訊、清理
     assert.equal(client.messages.filter(m => m.t === 'chat').length, 0, text);
     assert.equal(observer.messages.filter(m => m.t === 'chat').length, before, text);
     // 被擋不消耗發送額度；緊接著的正常訊息應送出。
-    const delivered = new Promise(resolve => observer.on('message', raw => { const m = JSON.parse(raw); if (m.t === 'chat' && m.id === client.welcome.id) resolve(m); }));
-    client.send(JSON.stringify({ t: 'chat', text: '3:1 2026 19:30 87 GEN.G 很爛' }));
-    assert.equal((await delivered).text, '3:1 2026 19:30 87 GEN.G 很爛');
+    const delivered = new Promise(resolve => {
+      const on = raw => { const m = JSON.parse(raw); if (m.t === 'chat' && m.id === client.welcome.id) { observer.off('message', on); resolve(m); } };
+      observer.on('message', on);
+    });
+    const normal = 'IG 2:0 贏了 IG vs BLG id 是 Chovy 幹掉對面中路 這操控好強 操盤手 主幹道 樹幹 若干 Essex 3:1 2026 19:30 87 GEN.G 很爛';
+    client.send(JSON.stringify({ t: 'chat', text: normal }));
+    assert.equal((await delivered).text, normal);
   }
   for (const name of ['a@example.com', '0912345678', '@player']) {
     const client = await connect(name);
