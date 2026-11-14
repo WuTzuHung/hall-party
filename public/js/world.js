@@ -452,9 +452,9 @@ function buildFacade(scene, anim, q) {
   box(-30.5, 15.5, -0.3, 30.5, 15.75, 1.75, 'plain');
   for (let x = -30.3; x < 30.3; x += 0.3) box(x, 15.3, 1.32, x + 0.16, 15.5, 1.48, 'plain');
   box(-30.7, 15.75, -0.3, 30.7, 16.2, 2.15, 'plain');
-  const friezeT = T.textTexture('EMIGRANT  ·  INDUSTRIAL  ·  SAVINGS  ·  BANK', { w: 2048, h: 128, color: '#7a6a52', font: '600 82px "Cinzel", serif', letter: 22 });
-  const frieze = new THREE.Mesh(new THREE.PlaneGeometry(26, 1.6), decal({ map: friezeT, roughness: 0.9 }));
-  frieze.position.set(0, 15.0, 1.36); scene.add(frieze);
+  const friezeT = T.textTexture('EMIGRANT  ·  INDUSTRIAL  ·  SAVINGS  ·  BANK', { w: 4096, h: 112, color: '#7a6a52', font: '600 82px "Cinzel", serif', letter: 22, fit: 0.92 });
+  const frieze = new THREE.Mesh(new THREE.PlaneGeometry(26, 0.7), decal({ map: friezeT, roughness: 0.9 }));
+  frieze.position.set(0, 14.95, 1.335); scene.add(frieze);
   for (const x of [-24.5, -16, 16, 24.5]) { const md = new THREE.CylinderGeometry(0.3, 0.3, 0.14, 20); place(md, { x, y: 15.0, z: 1.35, rx: Math.PI / 2 }); B.add(md, 'plain'); }
 
   // 上層樓

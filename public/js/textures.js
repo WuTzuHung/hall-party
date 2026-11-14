@@ -298,7 +298,7 @@ export function stainedGlass(size = 768, variant = 0) {
 }
 
 // ---------- 文字橫幅 ----------
-export function textTexture(lines, { w = 2048, h = 160, bg = 'rgba(0,0,0,0)', color = '#6b5c46', font = '700 96px "Cinzel", "Times New Roman", serif', letter = 18, shadow = null, engrave = null, border = null } = {}) {
+export function textTexture(lines, { w = 2048, h = 160, bg = 'rgba(0,0,0,0)', color = '#6b5c46', font = '700 96px "Cinzel", "Times New Roman", serif', letter = 18, shadow = null, engrave = null, border = null, fit = 0 } = {}) {
   const c = canvas(w, h); const ctx = c.getContext('2d');
   const draw = () => {
   ctx.clearRect(0, 0, w, h); ctx.shadowBlur = 0;
@@ -320,8 +320,16 @@ export function textTexture(lines, { w = 2048, h = 160, bg = 'rgba(0,0,0,0)', co
     }
     ctx.font = txt.font || font;
     if ('letterSpacing' in ctx) ctx.letterSpacing = (txt.letter ?? letter) + 'px';
+    let spacing = txt.letter ?? letter;
+    if (fit > 0 && fit <= 1) {
+      const width = ctx.measureText(txt.t).width - ('letterSpacing' in ctx ? spacing : 0);
+      const scale = Math.min(1, w * fit / Math.max(1, width));
+      ctx.font = ctx.font.replace(/([\d.]+)px/, (_, size) => (Number(size) * scale) + 'px');
+      spacing *= scale;
+      if ('letterSpacing' in ctx) ctx.letterSpacing = spacing + 'px';
+    }
     if (shadow) { ctx.shadowColor = shadow; ctx.shadowBlur = 12; }
-    const cx = w / 2 + ('letterSpacing' in ctx ? (txt.letter ?? letter) / 2 : 0); // 字距會加在最後一個字後面，往右補半個字距才真正置中
+    const cx = w / 2 + ('letterSpacing' in ctx ? spacing / 2 : 0); // 字距會加在最後一個字後面，往右補半個字距才真正置中
     if (engrave) { ctx.fillStyle = engrave; ctx.fillText(txt.t, cx + 1.5, y + 2); } // 陰刻的受光邊
     ctx.fillStyle = txt.color || color;
     ctx.fillText(txt.t, cx, y);
