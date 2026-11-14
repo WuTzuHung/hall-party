@@ -11,14 +11,14 @@ const facet = (g) => { const n = g.index ? g.toNonIndexed() : g; n.computeVertex
 
 // 專用的攝影棚環境貼圖：深色背景 + 幾條亮的柔光條，鏡面銀才會有照片裡「黑底白高光」的質感
 function studioEnv(renderer) {
-  const s = new THREE.Scene(); s.background = new THREE.Color(0x5c5d66);
+  const s = new THREE.Scene(); s.background = new THREE.Color(0x85868f);
   const strip = (w, h, c, k, x, y, z) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(k), side: THREE.DoubleSide })); m.position.set(x, y, z); m.lookAt(0, 0, 0); s.add(m); };
   strip(14, 14, 0xffffff, 3.0, 0, 9, 0);            // 頂光
   strip(5, 12, 0xfff2e0, 3.2, 8, 2, 3); strip(5, 12, 0xe6ecff, 3.2, -8, 2, 3);
   strip(4, 10, 0xffffff, 2.6, 5, 1, -8); strip(4, 10, 0xfff0e0, 2.6, -5, 1, -8);
   strip(10, 5, 0xffeedd, 2.6, 0, 3.5, 9); strip(9, 1.2, 0x20202a, 1, 0, -1.5, 9);
   strip(14, 14, 0x3a3632, 1, 0, -9, 0);           // 地面（暖灰，杯底才不會全黑）
-  for (let k = 0; k < 14; k++) { const a = k * 2.399, y = -2 + (k % 5) * 2.2; strip(0.5, 0.5, 0xffffff, 9, Math.cos(a) * 9, y, Math.sin(a) * 9); } // 小亮點
+  // （原本的小亮點已拿掉：它們在鏡面切面上會變成隨鏡頭跳動的閃點）
   const pm = new THREE.PMREMGenerator(renderer); const rt = pm.fromScene(s, 0.012); pm.dispose();
   s.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
   return rt.texture;
@@ -134,10 +134,10 @@ export function buildTrophy(renderer) {
 
   const env = studioEnv(renderer);
   const mats = {
-    silver: new THREE.MeshStandardMaterial({ color: 0xf4f6fa, metalness: 1, roughness: 0.07, envMap: env }),
-    gold: new THREE.MeshStandardMaterial({ color: 0xf0cc86, metalness: 1, roughness: 0.16, envMap: env }),
-    gem: new THREE.MeshStandardMaterial({ color: 0x0c2fc4, metalness: 0.35, roughness: 0.03, envMap: env, emissive: 0x0b36e0, emissiveIntensity: 0.6 }),
-    plaque: new THREE.MeshStandardMaterial({ map: T.plaque(), metalness: 0.7, roughness: 0.14, envMap: env, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }),
+    silver: new THREE.MeshStandardMaterial({ color: 0xf4f6fa, metalness: 1, roughness: 0.27, envMap: env }),
+    gold: new THREE.MeshStandardMaterial({ color: 0xf0cc86, metalness: 1, roughness: 0.32, envMap: env }),
+    gem: new THREE.MeshStandardMaterial({ color: 0x0c2fc4, metalness: 0.35, roughness: 0.22, envMap: env, emissive: 0x0b36e0, emissiveIntensity: 0.6 }),
+    plaque: new THREE.MeshStandardMaterial({ map: T.plaque(), metalness: 0.1, roughness: 0.5, envMap: env, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }),
   };
   const group = new THREE.Group(); let tris = 0;
   for (const k of Object.keys(parts)) { const g = mergeGeometries(parts[k], false); tris += g.attributes.position.count / 3; const m = new THREE.Mesh(g, mats[k]); group.add(m); }
@@ -153,7 +153,7 @@ export function buildTrophy(renderer) {
     vertexShader: `uniform float uTime, uPx; attribute vec3 aSeed; varying float vA;
       void main(){ vec4 mv = modelViewMatrix*vec4(position,1.0);
         float ph = uTime*aSeed.y + aSeed.x*6.2831; float tw = pow(max(0.0, sin(ph)), 10.0) + 0.35*pow(max(0.0, sin(ph*2.3+1.7)), 24.0);
-        vA = tw; gl_PointSize = min(220.0, uPx * 0.27 * aSeed.z * (0.5 + 0.5*tw) / max(0.5, -mv.z)); gl_Position = projectionMatrix*mv; }`,
+        vA = tw; gl_PointSize = min(70.0, uPx * 0.27 * aSeed.z * (0.5 + 0.5*tw) / max(0.5, -mv.z)); gl_Position = projectionMatrix*mv; }`,
     fragmentShader: `uniform sampler2D uTex; uniform float uGain; varying float vA;
       void main(){ float s = texture2D(uTex, gl_PointCoord).r; gl_FragColor = vec4(vec3(1.0,0.97,0.92)*s*vA*uGain, 1.0);
         #include <colorspace_fragment>
@@ -163,7 +163,8 @@ export function buildTrophy(renderer) {
   const size = new THREE.Vector2();
   // k：室內燈光 1 開、0 關。每幀把環境反射強度設回去（main.js 會在建場景後把所有材質的 envMapIntensity 乘上 0.35）
   const update = (t, k) => {
-    mats.silver.envMapIntensity = 1.5 + 0.15 * k; mats.gold.envMapIntensity = 1.5 + 0.15 * k; mats.gem.envMapIntensity = 1.6; mats.plaque.envMapIntensity = 1.0;
+    // 反射刻意調得柔和：鏡面太銳利時，切面會隨鏡頭移動在黑白之間跳動，看起來像閃爍
+    mats.silver.envMapIntensity = 1.2 + 0.1 * k; mats.gold.envMapIntensity = 1.2 + 0.1 * k; mats.gem.envMapIntensity = 1.0; mats.plaque.envMapIntensity = 0.25;
     mats.gem.emissiveIntensity = 0.75 - 0.2 * k;
     renderer.getDrawingBufferSize(size); sparkMat.uniforms.uPx.value = size.y; sparkMat.uniforms.uTime.value = t; sparkMat.uniforms.uGain.value = 1.15 - 0.25 * k;
   };
