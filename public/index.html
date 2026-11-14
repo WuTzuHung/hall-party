@@ -47,6 +47,30 @@
       <button id="chat-min" type="button" aria-label="縮小聊天"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M6 12h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
     </form>
   </div>
+  <div id="update-note" class="hidden" role="status">
+    <span class="un-text"><b>有新版本</b> · 更新後會回到原本的位置</span>
+    <span class="un-btns"><button id="btn-update" type="button" class="un-go">更新</button><button id="btn-later" type="button">稍後</button></span>
+  </div>
+  <div id="admin-dock" class="hidden">
+    <div id="ad-panel" role="group" aria-label="大螢幕控制">
+      <div class="ad-head"><span class="ad-title">大螢幕控制</span><span id="ad-mode" class="ad-mode">音樂</span><button id="ad-close" type="button" aria-label="收合">✕</button></div>
+      <div id="ad-now" class="ad-now"></div>
+      <div class="ad-row">
+        <button id="ad-play" type="button" aria-label="播放／暫停"></button>
+        <button id="ad-back" type="button">−10 秒</button>
+        <button id="ad-fwd" type="button">+10 秒</button>
+        <button id="ad-next" type="button">下一首</button>
+      </div>
+      <button id="ad-music" type="button" class="ad-wide">回到大廳音樂</button>
+      <form id="ad-form" autocomplete="off">
+        <input id="ad-url" type="text" placeholder="YouTube 網址" spellcheck="false" enterkeyhint="go" aria-label="YouTube 網址">
+        <label class="ad-live"><input id="ad-live" type="checkbox"> 直播</label>
+        <button type="submit" class="ad-go">播到大螢幕</button>
+      </form>
+      <div id="ad-msg"></div>
+    </div>
+    <button id="ad-toggle" type="button" aria-label="管理員控制台"><span class="ad-dot"></span>管理 · <span id="ad-mode-mini">音樂</span></button>
+  </div>
   <div id="hint">
     <div class="desk"><b>W A S D</b> 移動 · <b>Shift</b> 跑步 · <b>空白鍵</b> 跳躍 · <b>點畫面</b> 鎖定滑鼠轉視角，<b>Esc</b> 放開 · <b>滾輪</b> 拉近拉遠 · <b>E</b> 坐下/站起 · <b>Enter</b> 聊天</div>
     <div class="mob">左下搖桿移動 · 右側滑動轉視角 · 雙指縮放 · 右下按鈕跳躍</div>
@@ -90,7 +114,25 @@
       <li><b>坐下 / 站起</b>：走到椅子旁按 E 或點「坐下」，畫面會自動從座位看向大螢幕；再按一次或移動就會站起來</li><li><b>最佳視角</b>：坐下後點「🎯 最佳視角」跳到正中央，滾輪或雙指前後拉，再點一次取消</li><li><b>全螢幕觀看</b>：坐下後點「⛶ 全螢幕觀看」，大螢幕放到最大，按 Esc 或右上角離開</li>
       <li><b>聲音</b>：點右上角「開啟聲音」，走進大廳聲音會變大</li>
     </ul>
+    <div class="help-links">
+      <button type="button" class="linkish" id="btn-rechar">換角色</button>
+      <span id="ad-login-row"><span class="sep">·</span><button type="button" class="linkish" id="btn-admin-login">管理員登入</button></span>
+      <span id="ad-logged" class="hidden"><span class="sep">·</span><button type="button" class="linkish" id="btn-admin-logout">登出管理員</button></span>
+    </div>
+    <form id="ad-login" class="hidden" autocomplete="off">
+      <input id="ad-pw" type="password" placeholder="管理密碼" autocomplete="current-password" aria-label="管理密碼">
+      <button type="submit">登入</button>
+      <div id="ad-login-msg" class="muted"></div>
+    </form>
     <button class="close" data-close="help">知道了</button>
+  </div>
+</div>
+<div id="rejoin" class="overlay hidden"><div class="rejoin-box"><div class="loader"></div><div class="rejoin-t">回到殿堂中…</div></div></div>
+<div id="kicked" class="overlay hidden">
+  <div class="panel small">
+    <h2>殿堂已在別處開啟</h2>
+    <p id="kicked-text" class="lead">你在另一個分頁開啟了殿堂</p>
+    <button class="close" id="btn-kicked" type="button">在這個分頁繼續</button>
   </div>
 </div>
 <div id="loading-veil"></div>

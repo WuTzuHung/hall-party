@@ -175,3 +175,78 @@ body.touch.seated #chat-feed{top:calc(max(12px,env(safe-area-inset-top)) + 98px)
   .choice canvas{height:min(28vh,110px)}
   .choice{padding:6px 8px 8px} #btn-enter{padding:12px 20px}
 }
+
+/* ---- 座位已有人 ---- */
+#btn-sit.taken{background:var(--glass);color:var(--muted);border-color:rgba(255,255,255,.18);cursor:default;box-shadow:none;letter-spacing:.1em}
+
+/* ---- 重新整理後回到殿堂 ---- */
+#rejoin{z-index:25;background:rgba(8,5,18,.86);transition:opacity .6s}
+#rejoin.fade{opacity:0;pointer-events:none}
+.rejoin-box{text-align:center}
+.rejoin-t{font:500 14px "Noto Sans TC",system-ui,sans-serif;letter-spacing:.3em;color:var(--gold)}
+#kicked{z-index:26}
+
+/* ---- 新版本通知（右側） ---- */
+#update-note{position:absolute;z-index:3;right:max(16px,env(safe-area-inset-right));bottom:max(140px,calc(env(safe-area-inset-bottom) + 128px));pointer-events:auto;
+  display:flex;flex-direction:column;gap:10px;width:min(250px,calc(100vw - 32px));padding:13px 14px 12px;border-radius:14px;background:var(--glass);
+  border:1px solid var(--line);box-shadow:0 12px 30px rgba(0,0,0,.4);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  font-size:13px;color:var(--muted);animation:un-in .5s ease-out}
+#update-note b{color:var(--gold);font-weight:700;letter-spacing:.08em}
+.un-btns{display:flex;gap:8px;justify-content:flex-end}
+.un-btns button{padding:7px 14px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--ink);font-size:13px;font-weight:700}
+.un-btns .un-go{border:0;color:#1b1206;background:linear-gradient(180deg,#f6dc95,#d4a748)}
+@keyframes un-in{from{opacity:0}to{opacity:1}}
+body.has-dock:has(#admin-dock.open) #update-note{bottom:auto;top:calc(max(12px,env(safe-area-inset-top)) + 118px);right:auto;left:50%;transform:translateX(-50%)}
+body.touch #update-note{bottom:max(184px,calc(env(safe-area-inset-bottom) + 172px))}
+
+/* ---- 管理員控制台（右下） ---- */
+#admin-dock{position:absolute;right:max(16px,env(safe-area-inset-right));bottom:max(16px,env(safe-area-inset-bottom));pointer-events:auto;
+  display:flex;flex-direction:column;align-items:flex-end;gap:8px;z-index:2}
+body.touch #admin-dock{right:max(100px,calc(env(safe-area-inset-right) + 100px));bottom:max(34px,calc(env(safe-area-inset-bottom) + 22px))}
+#ad-toggle{display:inline-flex;align-items:center;gap:7px;padding:8px 13px;border-radius:999px;border:1px solid var(--line);background:var(--glass);
+  color:var(--gold);font-size:12.5px;font-weight:700;letter-spacing:.08em;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 6px 18px rgba(0,0,0,.35)}
+#ad-toggle:hover{background:rgba(60,40,90,.8)}
+.ad-dot{width:7px;height:7px;border-radius:50%;background:var(--gold);box-shadow:0 0 8px var(--gold)}
+#admin-dock.match .ad-dot{background:#ff7b8a;box-shadow:0 0 8px #ff7b8a}
+#ad-panel{display:none;width:min(300px,calc(100vw - 32px));padding:12px;border-radius:16px;background:var(--glass);border:1px solid var(--line);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 16px 40px rgba(0,0,0,.45);font-size:13px}
+#admin-dock.open #ad-panel{display:block}
+#admin-dock.open #ad-toggle{display:none}
+body.touch #admin-dock.open{right:max(12px,env(safe-area-inset-right));bottom:max(104px,calc(env(safe-area-inset-bottom) + 92px));z-index:3}
+.ad-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.ad-title{font:700 12px "Noto Sans TC",system-ui,sans-serif;letter-spacing:.2em;color:var(--gold)}
+.ad-mode{padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:700;background:rgba(224,189,106,.16);color:var(--gold);border:1px solid var(--line)}
+#admin-dock.match .ad-mode{background:rgba(255,123,138,.14);color:#ffb3bd;border-color:rgba(255,123,138,.4)}
+#ad-close{margin-left:auto;width:26px;height:26px;border-radius:50%;border:0;background:transparent;color:var(--muted);font-size:12px}
+#ad-close:hover{background:rgba(255,255,255,.08);color:var(--ink)}
+.ad-now{color:var(--muted);font-size:12px;margin-bottom:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ad-row{display:grid;grid-template-columns:44px 1fr 1fr 1.2fr;gap:6px;margin-bottom:6px}
+#ad-panel button{padding:8px 6px;border-radius:10px;border:1px solid var(--line);background:rgba(224,189,106,.1);color:var(--ink);font-size:12.5px;font-weight:700}
+#ad-panel button:hover:not(:disabled){background:rgba(224,189,106,.2)}
+#ad-panel button:disabled{opacity:.38;cursor:default}
+#ad-play{display:grid;place-items:center;color:var(--gold)!important}
+#ad-panel #ad-close{border:0;background:transparent;padding:0}
+.ad-wide{width:100%;margin-bottom:8px}
+#ad-form{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding-top:8px;border-top:1px solid rgba(224,189,106,.18)}
+#ad-url{flex:1 1 100%;min-width:0;height:34px;padding:0 10px;border-radius:10px;border:1px solid rgba(255,255,255,.14);background:rgba(10,6,22,.6);color:var(--ink);
+  font:400 13px "Noto Sans TC",system-ui,sans-serif;outline:0}
+#ad-url:focus{border-color:var(--line)}
+body.touch #ad-url{font-size:16px}
+.ad-live{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:12.5px}
+#ad-panel .ad-go{margin-left:auto;border:0;color:#1b1206;background:linear-gradient(180deg,#f6dc95,#d4a748);padding:8px 14px}
+#ad-msg{min-height:0;font-size:12px;margin-top:6px}
+#ad-msg:empty{display:none}
+#ad-msg.ok{color:#62e39a} #ad-msg.bad{color:#ff7b8a}
+body.has-dock:not(.touch) #hint{bottom:64px}
+@media (max-width:1000px){ body.has-dock:not(.touch) #hint{right:16px;bottom:64px} }
+
+/* ---- 說明面板：換角色、管理員登入 ---- */
+.help-links{display:flex;justify-content:center;align-items:center;gap:6px;margin:4px 0 8px;font-size:12.5px}
+.help-links .sep{color:rgba(201,191,216,.4);margin-right:6px}
+.linkish{border:0;background:none;padding:2px 2px;color:var(--muted);font-size:12.5px;text-decoration:underline;text-decoration-color:rgba(224,189,106,.4);text-underline-offset:3px}
+.linkish:hover{color:var(--gold)}
+#ad-login{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:0 auto 8px;max-width:300px}
+#ad-login input{flex:1;min-width:0;height:36px;padding:0 12px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(10,6,22,.6);color:var(--ink);font-size:14px;outline:0}
+body.touch #ad-login input{font-size:16px}
+#ad-login button{padding:0 16px;height:36px;border-radius:10px;border:1px solid var(--line);background:rgba(224,189,106,.15);color:var(--ink);font-weight:700}
+#ad-login-msg{flex-basis:100%;min-height:0;color:#ff7b8a}

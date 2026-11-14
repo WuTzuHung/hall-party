@@ -30,6 +30,28 @@ button:hover{filter:brightness(1.1)}
 code{background:#0f0a1f;padding:2px 6px;border-radius:6px;font-size:12px;word-break:break-all}
 .hidden{display:none}
 </style>
+<style>
+/* 大廳音樂／開賽倒數 */
+.chip{display:inline-block;margin-left:8px;padding:2px 10px;border-radius:999px;font-size:12px;vertical-align:2px;border:1px solid var(--line);color:var(--gold);background:rgba(224,189,106,.12)}
+.chip.match{color:#ffb3bd;border-color:rgba(255,123,138,.45);background:rgba(255,123,138,.12)}
+.mu-list{list-style:none;margin:12px 0 4px;padding:0;max-height:340px;overflow:auto;border-radius:12px;background:#0f0a1f}
+.mu-list li{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.05);font-size:14px}
+.mu-list li:last-child{border-bottom:0}
+.mu-list li.cur{background:rgba(224,189,106,.1)}
+.mu-list .n{width:22px;color:var(--muted);font-size:12px;text-align:right;flex:none}
+.mu-list li.cur .n{color:var(--gold)}
+.mu-list .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mu-list .t small{color:var(--muted);margin-left:6px}
+.mu-list button{padding:5px 9px;font-size:12px;border-radius:8px}
+.mu-list .empty{color:var(--muted);justify-content:center}
+.mu-opts{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.mu-opts .opt{display:inline-flex;gap:5px;align-items:center;margin:0 0 0 12px;color:var(--ink);font-size:14px}
+.cd-state{font-size:15px;margin-bottom:4px}
+.cd-state b{font-size:22px;color:var(--gold);font-variant-numeric:tabular-nums;letter-spacing:.04em}
+input.dt{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:#0f0a1f;color:var(--ink);font-size:15px;color-scheme:dark}
+#mu-msg{min-height:20px;font-size:14px}
+#music-card button:disabled,#cd-card button:disabled{opacity:.4;cursor:default;filter:none}
+</style>
 </head>
 <body><div class="wrap">
 <h1>HALL DES LUMIÈRES</h1>
@@ -82,6 +104,42 @@ code{background:#0f0a1f;padding:2px 6px;border-radius:6px;font-size:12px;word-br
     <div class="muted">在任何終端機執行：</div>
     <p><code id="curl"></code></p>
   </div>
+  <!-- ===== 大廳音樂與開賽倒數（獨立區塊） ===== -->
+  <div class="card" id="music-card">
+    <h2>大廳音樂 <span id="mu-mode" class="chip"></span></h2>
+    <div class="muted" id="mu-now">—</div>
+    <div class="row" style="margin-top:10px">
+      <button id="mu-next">下一首</button><button id="mu-back" class="primary">回到大廳音樂</button>
+    </div>
+    <label>加入歌單（YouTube 網址，任何格式都可以）</label>
+    <div class="row"><input type="text" id="mu-url" style="flex:2;min-width:220px" placeholder="https://youtu.be/... 或 watch?v=..."><input type="text" id="mu-title" style="flex:1;min-width:140px" placeholder="曲名（選填）"><button id="mu-add">加入</button></div>
+    <ol id="mu-list" class="mu-list"></ol>
+    <div class="mu-opts">
+      <div><span class="muted">循環</span>
+        <label class="opt"><input type="radio" name="mu-loop" value="all"> 整個歌單</label>
+        <label class="opt"><input type="radio" name="mu-loop" value="one"> 單曲</label>
+        <label class="opt"><input type="checkbox" id="mu-shuffle"> 隨機播放</label></div>
+      <div><span class="muted">大螢幕顯示</span>
+        <label class="opt"><input type="radio" name="mu-disp" value="card"> 正在播放卡片</label>
+        <label class="opt"><input type="radio" name="mu-disp" value="video"> 影片畫面</label></div>
+    </div>
+    <div class="muted" style="margin-top:8px">比賽開始（播放比賽影片或直播）時音樂會自動停止；非直播的比賽影片播完後自動回到大廳音樂，從下一首繼續。</div>
+  </div>
+  <div class="card" id="cd-card">
+    <h2>開賽倒數</h2>
+    <div id="cd-state" class="cd-state muted">尚未設定</div>
+    <label>開賽時間</label>
+    <input type="datetime-local" id="cd-at" class="dt">
+    <label>時間到自動播放的比賽網址</label>
+    <input type="text" id="cd-url" placeholder="https://www.youtube.com/live/... 或 watch?v=...">
+    <label>顯示名稱（選填）</label>
+    <input type="text" id="cd-title" placeholder="例如：GENG vs BLG 決賽">
+    <div class="row" style="margin-top:10px"><label style="margin:0;display:flex;gap:6px;align-items:center;color:var(--ink)"><input type="checkbox" id="cd-live"> 這是直播</label></div>
+    <div class="row" style="margin-top:12px"><button class="primary" id="cd-start">開始倒數</button><button id="cd-cancel">取消倒數</button></div>
+    <div class="muted" style="margin-top:8px">倒數期間大螢幕會在音樂畫面上顯示倒數；時間一到自動切換成比賽。</div>
+  </div>
+  <div id="mu-msg"></div>
+  <!-- ===== /大廳音樂與開賽倒數 ===== -->
   <div id="msg"></div>
 </div>
 </div>
@@ -128,5 +186,82 @@ $('#btn-seek').onclick = async () => {
 $('#btn-max').onclick = async () => { try { const r = await api('settings', { maxUsers: Number($('#max').value) }); render(r); msg('人數上限已更新'); } catch (e) { msg('失敗：' + e.message, false); } };
 $('#url').addEventListener('input', () => { if (/\/live\//.test($('#url').value)) $('#live').checked = true; });
 if (pw) login();
+</script>
+<script>
+// ===== 大廳音樂與開賽倒數 =====
+(() => {
+  const q = (s) => document.querySelector(s);
+  const curPw = () => { try { return (typeof pw !== 'undefined' && pw) || localStorage.getItem('hall-admin') || sessionStorage.getItem('hall-admin') || ''; } catch (_) { return ''; } };
+  async function call(path, body) {
+    const r = await fetch('/api/admin/' + path, { method: body ? 'POST' : 'GET', cache: 'no-store', headers: { 'Authorization': 'Bearer ' + curPw(), 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || r.status);
+    return j;
+  }
+  const say = (t, ok = true) => { const m = q('#mu-msg'); m.textContent = t; m.className = ok ? 'ok' : 'bad'; };
+  const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const mmss = (s) => { s = Math.max(0, Math.floor(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); };
+  let last = null, lastList = '', offset = 0;
+  function render(st) {
+    if (!st || !st.music) return;
+    last = st; offset = (st.serverTime || Date.now()) - Date.now();
+    const mu = st.music, isMusic = st.mode === 'music';
+    const chip = q('#mu-mode'); chip.textContent = isMusic ? '目前：大廳音樂' : '目前：比賽中'; chip.classList.toggle('match', !isMusic);
+    const t = mu.track;
+    q('#mu-now').textContent = !isMusic ? '比賽進行中，音樂已停止（比賽影片播完或按「回到大廳音樂」後繼續）'
+      : t ? `正在播放 ${mu.index + 1} / ${mu.count}：${t.title || t.id}${t.live ? '（直播）' : ''} · ${mu.playing ? '播放中' : '已暫停'} ${t.live ? '' : mmss(mu.position) + (mu.dur ? ' / ' + mmss(mu.dur) : '')}`
+      : '歌單是空的，大螢幕顯示待機畫面';
+    q('#mu-next').disabled = !isMusic || !mu.count;
+    q('#mu-back').disabled = isMusic && !!t;
+    const key = JSON.stringify([mu.list, mu.index, isMusic]);
+    if (key !== lastList) {
+      lastList = key;
+      const ol = q('#mu-list');
+      ol.innerHTML = mu.list.length ? mu.list.map((x, i) => `<li class="${i === mu.index ? 'cur' : ''}"><span class="n">${i === mu.index && isMusic ? '♪' : i + 1}</span><span class="t">${esc(x.title || x.id)}<small>${x.live ? '直播' : x.dur ? mmss(x.dur) : ''}</small></span>
+        <button data-mu="play" data-i="${i}" title="播放這首">▶</button><button data-mu="up" data-i="${i}" ${i ? '' : 'disabled'} title="上移">↑</button><button data-mu="down" data-i="${i}" ${i < mu.list.length - 1 ? '' : 'disabled'} title="下移">↓</button><button data-mu="remove" data-i="${i}" title="移除">✕</button></li>`).join('')
+        : '<li class="empty">還沒有歌曲，貼上 YouTube 網址加入</li>';
+    }
+    for (const r of document.querySelectorAll('[name=mu-loop]')) if (document.activeElement !== r) r.checked = r.value === mu.loop;
+    for (const r of document.querySelectorAll('[name=mu-disp]')) if (document.activeElement !== r) r.checked = r.value === mu.display;
+    if (document.activeElement !== q('#mu-shuffle')) q('#mu-shuffle').checked = !!mu.shuffle;
+    tickCd();
+  }
+  function tickCd() {
+    const cd = last && last.countdown, el = q('#cd-state');
+    q('#cd-cancel').disabled = !cd;
+    if (!cd) { el.textContent = '尚未設定'; return; }
+    const left = cd.at - (Date.now() + offset);
+    const when = new Date(cd.at).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    el.innerHTML = `距離開賽 <b>${left > 0 ? mmss(left / 1000) : '即將開始'}</b><br><span class="muted">${esc(when)} · ${esc(cd.title || cd.id)}${cd.live ? '（直播）' : ''}</span>`;
+  }
+  async function act(fn, ok) { try { render(await fn()); if (ok) say(ok); } catch (e) { say('失敗：' + e.message, false); } }
+  q('#mu-add').onclick = () => act(async () => { const r = await call('music', { action: 'add', url: q('#mu-url').value, title: q('#mu-title').value }); q('#mu-url').value = ''; q('#mu-title').value = ''; return r; }, '已加入歌單');
+  q('#mu-url').onkeydown = (e) => { if (e.key === 'Enter') q('#mu-add').click(); };
+  q('#mu-next').onclick = () => act(() => call('music', { action: 'next' }), '已切到下一首');
+  q('#mu-back').onclick = () => act(() => call('mode', { mode: 'music' }), '已回到大廳音樂');
+  q('#mu-list').onclick = (e) => {
+    const b = e.target.closest('button[data-mu]'); if (!b) return; const i = Number(b.dataset.i);
+    if (b.dataset.mu === 'play') act(() => call('music', { action: 'play', index: i }), '播放第 ' + (i + 1) + ' 首');
+    if (b.dataset.mu === 'up') act(() => call('music', { action: 'move', from: i, to: i - 1 }));
+    if (b.dataset.mu === 'down') act(() => call('music', { action: 'move', from: i, to: i + 1 }));
+    if (b.dataset.mu === 'remove') act(() => call('music', { action: 'remove', index: i }), '已移除');
+  };
+  for (const r of document.querySelectorAll('[name=mu-loop]')) r.onchange = () => act(() => call('music', { action: 'settings', loop: r.value }), r.value === 'one' ? '單曲循環' : '整個歌單循環');
+  for (const r of document.querySelectorAll('[name=mu-disp]')) r.onchange = () => act(() => call('music', { action: 'settings', musicDisplay: r.value }), '大螢幕顯示已更新');
+  q('#mu-shuffle').onchange = () => act(() => call('music', { action: 'settings', shuffle: q('#mu-shuffle').checked }), q('#mu-shuffle').checked ? '隨機播放' : '依序播放');
+  q('#cd-url').addEventListener('input', () => { if (/\/live\//.test(q('#cd-url').value)) q('#cd-live').checked = true; });
+  q('#cd-start').onclick = () => {
+    const v = q('#cd-at').value; const at = v ? new Date(v).getTime() : NaN;
+    if (!Number.isFinite(at)) return say('請選擇開賽時間', false);
+    act(() => call('countdown', { at: at + offset, url: q('#cd-url').value, live: q('#cd-live').checked, title: q('#cd-title').value }), '倒數已開始');
+  };
+  q('#cd-cancel').onclick = () => act(() => call('countdown', { cancel: true }), '已取消倒數');
+  // 預設開賽時間：下一個整點
+  { const d = new Date(Date.now() + 3600e3); d.setMinutes(0, 0, 0); const p = (n) => String(n).padStart(2, '0'); q('#cd-at').value = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; }
+  const refresh = () => { if (q('#panel').classList.contains('hidden') || !curPw()) return; call('state').then(render).catch(() => { }); };
+  setInterval(refresh, 3000); setInterval(tickCd, 1000);
+  new MutationObserver(refresh).observe(q('#panel'), { attributes: true, attributeFilter: ['class'] });
+  refresh();
+})();
 </script>
 </body></html>

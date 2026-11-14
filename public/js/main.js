@@ -4,6 +4,7 @@ import { buildWorld, SPAWN, HALL, SCREEN } from './world.js';
 import { Avatar } from './avatar.js';
 import { BigScreen } from './screen.js';
 import { initChat } from './chat.js';
+import { initAdminDock } from './admin-dock.js';
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -189,33 +190,44 @@ canvas.addEventListener('wheel', (e) => {
 }, { passive: false });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
-// ---------- 坐下 ----------
-let nearSeat = null;
-function seatTaken(s) {
-  for (const r of remotes.values()) if (r.sitting && Math.hypot(r.tx - s.x, r.tz - s.z) < 0.3) return true;
-  return false;
-}
+// ---------- 坐下（一人一椅，伺服器為準） ----------
+// 座位編號 = world.seats 的順序（world.js 依固定順序建立，所有用戶端一致）
+world.seats.forEach((s, i) => { s.i = i; });
+const seatOcc = new Map(); // 座位編號 -> 坐著的玩家 id（伺服器廣播）
+let nearSeat = null, nearTaken = false;
+function seatTaken(s) { const o = seatOcc.get(s.i); return !!o && o !== me.id; }
+function setSeatOcc(list) { seatOcc.clear(); for (const [i, id] of list || []) seatOcc.set(Number(i), String(id)); }
+// 找最近的空椅子；範圍內只有別人坐著的椅子時 nearTaken = true（按鈕顯示「已有人」）
 function findSeat() {
-  let best = null, bd = 1.25;
+  let best = null, bd = 1.25; nearTaken = false;
   for (const s of world.seats) {
     if (Math.abs((s.y - 0.5) - me.pos.y) > 0.6) continue;
     const d = Math.hypot(s.x - me.pos.x, s.z - me.pos.z);
-    if (d < bd && !seatTaken(s)) { bd = d; best = s; }
+    if (d >= 1.25) continue;
+    if (seatTaken(s)) { nearTaken = true; continue; }
+    if (d < bd) { bd = d; best = s; }
   }
   return best;
 }
 function toggleSit() {
   if (me.seat) { standUp(); return; }
   if (!me.onGround) return;
-  const s = nearSeat || findSeat(); if (!s) return;
+  const s = (nearSeat && !seatTaken(nearSeat) ? nearSeat : null) || findSeat();
+  if (!s) { if (nearTaken) toast('這個位子有人坐了'); return; }
+  sitAt(s);
+}
+function sitAt(s, quiet) {
   me.seat = s; me.pos.set(s.x, s.y - 0.5, s.z); me.ry = s.ry; me.speed = 0; me.vy = 0; me.jumping = false;
   seatView();
-  $('#btn-sit').textContent = '站起來'; toast('已坐下 · 可用下方按鈕切換最佳視角或全螢幕');
+  $('#btn-sit').textContent = '站起來'; $('#btn-sit').disabled = false; sitLabel = '站起來';
+  if (!quiet) toast('已坐下 · 可用下方按鈕切換最佳視角或全螢幕');
   $('#seat-tools').classList.remove('hidden'); setMode('seat');
+  wsSend({ t: 'sit', seat: s.i }); // 先坐下（樂觀），伺服器拒絕時再站起來
   sendNow();
 }
 function standUp() {
   const s = me.seat; me.seat = null;
+  wsSend({ t: 'stand' });
   setMode('normal'); $('#seat-tools').classList.add('hidden');
   cam.dist = cam.targetDist = 5; cam.pitch = 0.18;
   // 站起來：從椅子的碰撞方塊外面找一個空位（先試前方，再試兩側、後方，最後往外繞圈找）
@@ -229,8 +241,9 @@ function standUp() {
   }
   if (spot) me.pos.set(spot[0], spot[1], spot[2]); else { me.pos.x += fx * 0.62; me.pos.z += fz * 0.62; }
   me.onGround = true; me.vy = 0;
-  $('#btn-sit').textContent = '坐下'; sendNow();
+  $('#btn-sit').textContent = '坐下'; sitLabel = '坐下'; sendNow();
 }
+let sitLabel = '坐下';
 $('#btn-sit').addEventListener('click', (e) => { e.stopPropagation(); toggleSit(); });
 
 // 坐下時：第一人稱，從座位的眼睛高度看向大螢幕中央
@@ -311,32 +324,84 @@ $('#btn-enter').addEventListener('click', () => {
   me.name = cleanName(nameInput.value) || defaultName; nameInput.value = cleanName(nameInput.value);
   try { if (nameInput.value) localStorage.setItem('hall-name', nameInput.value); else localStorage.removeItem('hall-name'); } catch (_) { }
   setSound(true); // 使用者點擊時解除靜音（瀏覽器規定需要互動）
+  saveIdentity();
   status('連線中…');
   connect();
 });
 
+// ---------- 身分保存（重新整理、伺服器重啟後回到原位） ----------
+// localStorage：hall-identity = { token, name, color }（token 由伺服器以 HMAC 簽章，用來認回同一個名額與座位）
+//               hall-snap = { x,y,z,ry, seat, view, yaw,pitch,dist, sound, t }（每秒與離開頁面時存一次）
+const LS = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (_) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) { } },
+  del(k) { try { localStorage.removeItem(k); } catch (_) { } },
+};
+let identity = LS.get('hall-identity') || {};
+let kicked = false;
+function saveIdentity() { identity = { ...identity, name: me.name, color: me.color }; LS.set('hall-identity', identity); }
+function saveSnap() {
+  if (!entered || kicked) return;
+  LS.set('hall-snap', {
+    x: +me.pos.x.toFixed(2), y: +me.pos.y.toFixed(2), z: +me.pos.z.toFixed(2), ry: +me.ry.toFixed(2),
+    seat: me.seat ? me.seat.i : null, view: viewMode, yaw: +cam.yaw.toFixed(3), pitch: +cam.pitch.toFixed(3), dist: +cam.targetDist.toFixed(2),
+    sound: soundOn || soundWanted, t: Date.now(),
+  });
+}
+let lastSnapSave = 0;
+function saveSnapMaybe(now) { if (now - lastSnapSave > 1000) { lastSnapSave = now; saveSnap(); } }
+addEventListener('pagehide', saveSnap); addEventListener('beforeunload', saveSnap);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveSnap(); });
+// 30 分鐘內重新整理：跳過選角，直接回到原位
+const RESTORE_MS = 30 * 60 * 1000;
+let restoreSnap = null, soundWanted = false;
+{
+  const snap = LS.get('hall-snap');
+  if (identity.color && identity.token && snap && Date.now() - snap.t < RESTORE_MS && !params.has('select')) restoreSnap = snap;
+  if (identity.color) {
+    const b = document.querySelector(`.choice[data-color=${identity.color === 'blue' ? 'blue' : 'pink'}]`);
+    if (b) b.click();
+  }
+}
+// 換角色：清掉保存的外觀與位置（token 保留，伺服器會把同一個名額改成新名字／顏色）
+function changeCharacter() {
+  LS.del('hall-snap'); identity = { token: identity.token }; LS.set('hall-identity', identity);
+  kicked = true; // 不要在離開前又存一次
+  location.replace(location.pathname);
+}
+
 // ---------- 網路 ----------
 let ws, serverOffset = 0, lastSend = 0, lastSent = '';
+let bootVersion = null, mediaState = null;
 const remotes = new Map();
+function wsSend(m) { if (ws && ws.readyState === 1 && me.id) ws.send(JSON.stringify(m)); }
 function connect() {
   ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
-  ws.onopen = () => { ws.send(JSON.stringify({ t: 'hello', color: me.color, name: me.name })); ping(); };
+  ws.onopen = () => { ws.send(JSON.stringify({ t: 'hello', color: me.color, name: me.name, token: identity.token || null, keep: true })); ping(); };
   ws.onmessage = (ev) => {
     const m = JSON.parse(ev.data);
     switch (m.t) {
       case 'welcome': onWelcome(m); break;
-      case 'queue': $('#select').classList.add('hidden'); $('#queue').classList.remove('hidden');
+      case 'queue': $('#select').classList.add('hidden'); $('#rejoin').classList.add('hidden'); $('#queue').classList.remove('hidden');
         $('#queue-text').textContent = `目前 ${m.online} / ${m.max} 人在線，你排在第 ${m.position} 位。`; break;
       case 's': onSnapshot(m); break;
       case 'join': addRemote(m.id, m.c, m); break;
       case 'leave': removeRemote(m.id); break;
       case 'chat': onChat(m); break;
       case 'info': for (const o of m.p) { const r = remotes.get(o.id); if (r && r.needInfo) { removeRemote(o.id); addRemote(o.id, o.c, { ...r.last, n: o.n }); } } break;
+      case 'media': onMedia(m.m); break;
       case 'video': screen.setState(m.video); break;
-      case 'pong': { const rtt = performance.now() - m.c; serverOffset = m.s + rtt / 2 - Date.now(); break; }
+      case 'seats': setSeatOcc(m.s); break;
+      case 'sitOk': break;
+      case 'sitNo':
+        if (me.seat && me.seat.i === Number(m.seat)) { standUp(); toast('這個位子有人坐了'); }
+        break;
+      case 'kicked': onKicked(m.reason); break;
+      case 'pong': { const rtt = performance.now() - m.c; serverOffset = m.s + rtt / 2 - Date.now(); screen.setServerOffset(serverOffset); break; }
     }
   };
   ws.onclose = () => {
+    if (kicked) return;
     if (!entered) { status('連線中斷，2 秒後重試…'); setTimeout(connect, 2000); return; }
     toast('連線中斷，正在重新連線…', 4000);
     for (const id of [...remotes.keys()]) removeRemote(id);
@@ -345,28 +410,82 @@ function connect() {
 }
 function ping() { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'ping', c: performance.now() })); }
 setInterval(ping, 20000);
+function onKicked(reason) {
+  kicked = true;
+  $('#kicked-text').textContent = reason || '你在另一個分頁開啟了殿堂';
+  $('#kicked').classList.remove('hidden'); $('#rejoin').classList.add('hidden');
+  unlockPointer(); setSound(false);
+  for (const id of [...remotes.keys()]) removeRemote(id);
+}
+$('#btn-kicked').addEventListener('click', () => location.reload());
+function onMedia(m) {
+  mediaState = m; screen.setMedia(m); dock.setMedia(m);
+}
+// 播放器回報（片長、播完、無法播放），讓伺服器決定何時換下一首／比賽結束回到音樂
+screen.onReport = (msg) => wsSend(msg);
 
 function onWelcome(m) {
+  const firstEntry = !entered;
   me.id = m.id; if (m.name) me.name = m.name;
+  if (m.token) { identity.token = m.token; saveIdentity(); }
   for (const id of [...remotes.keys()]) removeRemote(id); // 重新連線：以伺服器的名單為準，不留下舊的角色
   $('#select').classList.add('hidden'); $('#queue').classList.add('hidden'); $('#hud').classList.remove('hidden');
+  $('#rejoin').classList.add('fade'); setTimeout(() => $('#rejoin').classList.add('hidden'), 600);
   for (const p of previews) { p.r.dispose(); }
   previews.length = 0;
-  screen.setState(m.video);
+  setSeatOcc(m.seats);
+  if (m.media) onMedia(m.media); else screen.setState(m.video);
   for (const p of m.players) addRemote(p.id, p.c, p);
-  if (!entered) {
+  if (firstEntry) {
     entered = true;
     me.avatar = new Avatar(me.color); scene.add(me.avatar.root);
     me.avatar.setName(me.name);
     me.pos.set(SPAWN.x + (Math.random() - 0.5) * 6, 0.15, SPAWN.z + (Math.random() - 0.5) * 1.5);
     me.ry = Math.PI; cam.yaw = 0; cam.pitch = 0.12; cam.dist = cam.targetDist = 6; me.camY = me.pos.y;
     if (isTouch) $('#btn-jump').classList.remove('hidden');
-    toast('歡迎！往前走進大門，大螢幕就在大廳盡頭', 4500);
-    setTimeout(() => $('#hint').classList.add('fade'), 12000);
+    if (restoreSnap) restoreFrom(restoreSnap);
+    else { toast('歡迎！往前走進大門，大螢幕就在大廳盡頭', 4500); }
+    setTimeout(() => $('#hint').classList.add('fade'), restoreSnap ? 2000 : 12000);
+    restoreSnap = null;
+  } else {
+    if (me.avatar.labels && me.avatar.labels.name !== me.name) me.avatar.setName(me.name);
+    if (me.seat) wsSend({ t: 'sit', seat: me.seat.i }); // 重新連線：再要一次同一張椅子（保留期間伺服器仍算你的）
   }
-  else if (me.avatar.labels && me.avatar.labels.name !== me.name) me.avatar.setName(me.name);
   updateOnline(m.players.length + 1);
+  checkVersion(m.version);
 }
+// 回到重新整理前的位置、面向與視角；原本的椅子還空著就坐回去
+function restoreFrom(sn) {
+  const n = (v, d) => (Number.isFinite(v) ? v : d);
+  me.pos.set(n(sn.x, me.pos.x), n(sn.y, me.pos.y), n(sn.z, me.pos.z)); me.ry = n(sn.ry, me.ry); me.camY = me.pos.y;
+  cam.yaw = n(sn.yaw, cam.yaw); cam.pitch = n(sn.pitch, cam.pitch); cam.dist = cam.targetDist = THREE.MathUtils.clamp(n(sn.dist, cam.dist), cam.minD, cam.maxD);
+  const s = Number.isInteger(sn.seat) ? world.seats[sn.seat] : null;
+  if (s && !seatTaken(s)) {
+    sitAt(s, true);
+    if (sn.view === 'best') setMode('best');
+    else if (sn.view === 'full') enterFull();
+  } else if (s) toast('原本的位子已經有人坐了');
+  if (!me.seat && freeSpot(me.pos.x, me.pos.y, me.pos.z) === null) collide(me.pos);
+  // 瀏覽器規定要有使用者互動才能開聲音：點一下畫面或按任意鍵就恢復
+  if (sn.sound) {
+    soundWanted = true; toast('歡迎回來 · 點一下畫面即可恢復聲音', 4500);
+    const on = (e) => { soundWanted = false; if (!soundOn && !kicked && !(e.target.closest && e.target.closest('#btn-sound'))) setSound(true); removeEventListener('pointerdown', on, true); removeEventListener('keydown', on, true); };
+    addEventListener('pointerdown', on, true); addEventListener('keydown', on, true);
+  } else toast('歡迎回來', 2500);
+}
+
+// ---------- 新版本通知 ----------
+let dismissedVersion = null;
+function checkVersion(v) {
+  if (!v) return;
+  if (!bootVersion) { bootVersion = v; return; }
+  if (v !== bootVersion && v !== dismissedVersion && entered && !kicked) { $('#update-note').classList.remove('hidden'); $('#update-note').dataset.v = v; }
+}
+fetch('/api/version', { cache: 'no-store' }).then(r => r.json()).then(j => { if (!bootVersion) bootVersion = j.version; }).catch(() => { });
+setInterval(() => { fetch('/api/version', { cache: 'no-store' }).then(r => r.json()).then(j => checkVersion(j.version)).catch(() => { }); }, 60000);
+$('#btn-update').addEventListener('click', () => { saveSnap(); location.reload(); });
+$('#btn-later').addEventListener('click', () => { dismissedVersion = $('#update-note').dataset.v; $('#update-note').classList.add('hidden'); });
+
 function updateOnline(n) { $('#online-n').textContent = n; }
 function addRemote(id, color, p) {
   if (id === me.id || remotes.has(id)) return;
@@ -403,6 +522,9 @@ const chat = initChat({
   send: (text) => { if (!ws || ws.readyState !== 1 || !me.id) return false; ws.send(JSON.stringify({ t: 'chat', text })); return true; },
   onFocus: () => { clearKeys(); unlockPointer(); },
 });
+// 管理員控制台（有存管理密碼且驗證成功才顯示）
+const dock = initAdminDock({ toast, onFocus: () => { clearKeys(); unlockPointer(); }, isTouch });
+$('#btn-rechar').addEventListener('click', changeCharacter);
 function sendNow() { lastSend = 0; }
 function netSend(now) {
   if (!ws || ws.readyState !== 1 || !entered) return;
@@ -535,8 +657,11 @@ function frame() {
     // 附近椅子提示
     if (!me.seat) {
       nearSeat = findSeat();
-      $('#btn-sit').classList.toggle('hidden', !nearSeat);
+      const sb = $('#btn-sit'); sb.classList.toggle('hidden', !nearSeat && !nearTaken);
+      const lbl = nearSeat ? '坐下' : '已有人';
+      if (lbl !== sitLabel) { sitLabel = lbl; sb.textContent = lbl; sb.disabled = !nearSeat; sb.classList.toggle('taken', !nearSeat); }
     } else $('#btn-sit').classList.remove('hidden');
+    saveSnapMaybe(now);
     if (now - lastVideoTick > 4000) { lastVideoTick = now; screen.tick(); updateVolume(); }
   } else {
     // 開場：環繞建築外觀
@@ -575,10 +700,17 @@ addEventListener('resize', () => {
 
 status('');
 requestAnimationFrame(frame);
+if (restoreSnap) {
+  // 重新整理後自動回到殿堂（不經過選角畫面）
+  me.color = identity.color === 'blue' ? 'blue' : 'pink';
+  me.name = cleanName(identity.name) || defaultName;
+  $('#select').classList.add('hidden'); $('#rejoin').classList.remove('hidden');
+  connect();
+}
 setTimeout(() => $('#loading-veil').classList.add('gone'), 100);
 // 手機跳躍按鈕
 const jumpBtn = $('#btn-jump');
 jumpBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); jumpQueued = performance.now(); jumpBtn.classList.add('press'); });
 for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) jumpBtn.addEventListener(ev, () => jumpBtn.classList.remove('press'));
 jumpBtn.addEventListener('contextmenu', (e) => e.preventDefault());
-window.__hall = { me, cam, camera, scene, world, remotes, toggleSit, collide, groundAt, freeSpot, chat, jump: () => { jumpQueued = performance.now(); }, get ws() { return ws; }, get viewMode() { return viewMode; }, enterFull, exitFull };
+window.__hall = { seatOcc, checkVersion, get media() { return mediaState; }, screen, dock, me, cam, camera, scene, world, remotes, toggleSit, collide, groundAt, freeSpot, chat, jump: () => { jumpQueued = performance.now(); }, get ws() { return ws; }, get viewMode() { return viewMode; }, enterFull, exitFull };
