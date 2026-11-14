@@ -224,7 +224,20 @@ const seats = new Map(); // seatIndex -> player id（一人一椅，伺服器為
 let nextId = 1;
 
 const connectedCount = () => { let n = 0; for (const p of players.values()) if (p.ws) n++; return n; };
-const roomFree = () => players.size < state.maxUsers;
+// 管理員不佔名額：人數上限只計算一般玩家（含保留中的名額）
+const slotsUsed = () => { let n = 0; for (const p of players.values()) if (!p.admin) n++; return n; };
+const roomFree = () => slotsUsed() < state.maxUsers;
+// 管理員入場券：用管理密碼向 /api/admin/ticket 換一張 2 分鐘有效的簽章，hello 時帶上，密碼本身不經過 WebSocket
+const ADMIN_TICKET_AGE = 120000;
+function signTicket() { const body = b64u(JSON.stringify({ adm: 1, i: Date.now() })); return body + '.' + b64u(crypto.createHmac('sha256', TOKEN_SECRET).update('ticket|' + body).digest()); }
+function verifyTicket(t) {
+  if (typeof t !== 'string' || t.length > 200) return false;
+  const [body, sig] = t.split('.'); if (!body || !sig) return false;
+  const want = crypto.createHmac('sha256', TOKEN_SECRET).update('ticket|' + body).digest();
+  let got; try { got = Buffer.from(sig, 'base64url'); } catch (_) { return false; }
+  if (got.length !== want.length || !crypto.timingSafeEqual(got, want)) return false;
+  try { const d = JSON.parse(Buffer.from(body, 'base64url').toString()); const age = Date.now() - d.i; return d.adm === 1 && age > -60000 && age < ADMIN_TICKET_AGE; } catch (_) { return false; }
+}
 function send(ws, msg) {
   if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg));
 }
@@ -259,9 +272,9 @@ function admit(ws) {
       try { old.close(4001, 'replaced'); } catch (_) { }
       broadcast({ t: 'leave', id: p.id }, ws); // 先讓其他人移除舊角色，下面再以新名字／顏色加入
     }
-    p.color = ws._color; p.name = name; p.keep = !!ws._keep;
+    p.color = ws._color; p.name = name; p.keep = !!ws._keep; p.admin = !!ws._admin;
   } else {
-    p = { id: String(nextId++), uid, ws, color: ws._color, name, x: 0, y: 0, z: 30, ry: Math.PI, anim: 0, keep: !!ws._keep, reservedUntil: 0 };
+    p = { id: String(nextId++), uid, ws, color: ws._color, name, x: 0, y: 0, z: 30, ry: Math.PI, anim: 0, keep: !!ws._keep, reservedUntil: 0, admin: !!ws._admin };
     players.set(p.id, p); byUid.set(uid, p);
   }
   ws._playerId = p.id;
@@ -328,6 +341,7 @@ const server = http.createServer(async (req, res) => {
     if (!checkAdmin(req)) return json(res, 401, { error: '密碼錯誤' });
     if (req.method === 'GET' && p === '/api/admin/state') return json(res, 200, adminState());
     if (req.method !== 'POST') return json(res, 405, { error: 'method' });
+    if (p === '/api/admin/ticket') return json(res, 200, { ticket: signTicket() });
     const body = await readBody(req);
     if (p === '/api/admin/lights') {
       // 室內燈：{ on: true|false } 或 { toggle: true }；只廣播 { t:'lights', on }，不動播放狀態
@@ -469,10 +483,11 @@ wss.on('connection', (ws) => {
       ws._name = cleanText(m.name, NAME_MAX);
       { const nm = filterChat(ws._name); ws._name = nm.ok ? nm.text : ''; } // 空白會由 admit 產生預設訪客名稱
       ws._keep = !!m.keep; // 用戶端會保存 token、支援重新整理後回到原位：斷線時才保留名額
+      ws._admin = verifyTicket(m.adm);
       const tok = verifyToken(m.token);
       if (tok) ws._uid = tok.uid;
       const known = tok && byUid.get(tok.uid);
-      if (known) admit(ws); // 名額（與座位）還保留著，或另一個分頁仍在線：直接進場
+      if (known || ws._admin) { admit(ws); if (ws._admin) tryAdmitQueue(); } // 名額（與座位）還保留著，或另一個分頁仍在線：直接進場
       else if (roomFree() && !queue.length) admit(ws);
       else if (tok && Date.now() - BOOT_AT < BOOT_GRACE_MS && Date.now() - tok.iat < TOKEN_PRIORITY_AGE) {
         // 伺服器剛重啟：原本在場內的人優先（仍遵守人數上限，但排在沒有 token 的人前面）

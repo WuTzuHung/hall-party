@@ -411,7 +411,16 @@ const remotes = new Map();
 function wsSend(m) { if (ws && ws.readyState === 1 && me.id) ws.send(JSON.stringify(m)); }
 function connect() {
   ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
-  ws.onopen = () => { ws.send(JSON.stringify({ t: 'hello', color: me.color, name: me.name, token: identity.token || null, keep: true })); ping(); };
+  ws.onopen = async () => {
+    // 管理員不佔名額：有保存管理密碼時，先換一張短效入場券再打招呼（密碼只送到同源的 /api/admin/*）
+    let adm = null;
+    try {
+      const pw = localStorage.getItem('hall-admin') || sessionStorage.getItem('hall-admin');
+      if (pw) { const r = await fetch('/api/admin/ticket', { method: 'POST', cache: 'no-store', credentials: 'same-origin', headers: { Authorization: 'Bearer ' + pw, 'Content-Type': 'application/json' }, body: '{}', signal: AbortSignal.timeout(4000) }); if (r.ok) adm = (await r.json()).ticket || null; }
+    } catch (_) { }
+    if (ws.readyState !== 1) return;
+    ws.send(JSON.stringify({ t: 'hello', color: me.color, name: me.name, token: identity.token || null, keep: true, adm })); ping();
+  };
   ws.onmessage = (ev) => {
     const m = JSON.parse(ev.data);
     switch (m.t) {
