@@ -823,6 +823,33 @@ function buildInterior(scene, anim, q, renderer) {
   // 金框比黑色背板外擴 5cm，四邊互不共面
   box(-7.65, 1.8, -57.99, 7.65, 2.1, -57.85, 'gold'); box(-7.65, 10.2, -57.99, 7.65, 10.5, -57.85, 'gold');
   box(-7.65, 2.1, -57.99, -7.3, 10.2, -57.85, 'gold'); box(7.3, 2.1, -57.99, 7.65, 10.2, -57.85, 'gold');
+  // 螢幕上方的石雕橫楣：下線腳、飾帶（GENG · 桂冠圓徽 · BLG）、齒飾、上簷。安靜的建築裝飾，把螢幕框進牆面
+  {
+    const EZ = -57.99;
+    box(-7.95, 10.78, EZ, 7.95, 10.9, -57.74, 'plain'); box(-7.88, 10.9, EZ, 7.88, 10.98, -57.8, 'gold');
+    box(-7.8, 10.98, EZ, 7.8, 12.06, -57.86, 'plain');
+    for (let i = -25; i <= 25; i++) box(i * 0.3 - 0.085, 12.06, EZ, i * 0.3 + 0.085, 12.2, -57.79, 'plain');
+    box(-7.86, 12.06, EZ, 7.86, 12.2, -57.845, 'plain');
+    box(-7.98, 12.2, EZ, 7.98, 12.3, -57.7, 'plain'); box(-8.06, 12.3, EZ, 8.06, 12.38, -57.64, 'plain');
+    for (const sg of [-1, 1]) { // 兩端的小托座
+      box(sg * 7.62 - 0.16, 10.5, EZ, sg * 7.62 + 0.16, 10.78, -57.8, 'plain');
+    }
+    // 中央桂冠圓徽
+    const MY = 11.52, MZ = -57.8;
+    const disc = new THREE.CylinderGeometry(0.47, 0.47, 0.05, 40); place(disc, { x: 0, y: MY, z: MZ - 0.035, rx: Math.PI / 2 }); B.add(disc, 'plain');
+    const ring = new THREE.TorusGeometry(0.44, 0.04, 8, 48); place(ring, { x: 0, y: MY, z: MZ }); B.add(ring, 'gold');
+    for (const sg of [-1, 1]) for (let i = 0; i < 9; i++) { // 兩側向上合攏的月桂葉
+      const a = -Math.PI / 2 + sg * (0.22 + i * 0.3), r = 0.36;
+      const leaf = new THREE.SphereGeometry(0.075, 8, 6); place(leaf, { sx: 1.7, sy: 0.62, sz: 0.4 }); place(leaf, { rz: a + sg * 2.0 }); place(leaf, { x: Math.cos(a) * r, y: MY + Math.sin(a) * r, z: MZ + 0.012 }); B.add(leaf, 'gold');
+    }
+    const star = new THREE.OctahedronGeometry(0.13, 0); place(star, { sx: 1, sy: 1.25, sz: 0.4 }); place(star, { x: 0, y: MY, z: MZ + 0.01 }); B.add(star, 'gold');
+    // 兩側的刻字
+    for (const [txt, x] of [['GENG', -3.9], ['BLG', 3.9]]) {
+      const tt = T.textTexture(txt, { w: 512, h: 128, color: '#5a4a33', engrave: 'rgba(255,250,235,0.7)', font: '700 76px "Cinzel", "Times New Roman", serif', letter: 26 });
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(2.3, 0.575), decal({ map: tt, roughness: 0.8 })); m.position.set(x, MY, -57.852); scene.add(m);
+    }
+    for (const x of [-1.75, 1.75, -6.05, 6.05]) { const rule = new THREE.BoxGeometry(1.5, 0.016, 0.012); place(rule, { x, y: MY, z: -57.853 }); B.add(rule, 'gold'); }
+  }
   box(-7.5, 0, -58, 7.5, 0.45, -55.5, 'clothDark');
   box(-7.54, 0.3, -55.56, 7.54, 0.36, -55.46, 'ledPurple');
   floors.push({ x0: -7.5, x1: 7.5, z0: -58, z1: -55.5, y: 0.45 });
