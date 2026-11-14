@@ -1,7 +1,8 @@
 <!doctype html>
 <html lang="zh-Hant">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0e0a1b">
 <meta name="robots" content="noindex">
 <title>光之殿堂 · 管理後台</title>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
@@ -18,7 +19,7 @@ input[type=text],input[type=password],input[type=number]{width:100%;padding:11px
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 button{padding:10px 16px;border-radius:10px;border:1px solid var(--line);background:rgba(224,189,106,.14);color:var(--ink);font-weight:700;cursor:pointer;font-size:14px}
 button.primary{background:linear-gradient(180deg,#f6dc95,#d4a748);color:#1b1206;border:0}
-button:hover{filter:brightness(1.1)}
+@media (hover:hover) and (pointer:fine){button:hover{filter:brightness(1.1)}}
 .now{display:flex;gap:14px;align-items:center}
 .now img{width:160px;aspect-ratio:16/9;object-fit:cover;border-radius:10px;background:#000}
 .muted{color:var(--muted);font-size:13px}
@@ -29,6 +30,24 @@ button:hover{filter:brightness(1.1)}
 .grid div{background:#0f0a1f;border-radius:10px;padding:10px;text-align:center}
 code{background:#0f0a1f;padding:2px 6px;border-radius:6px;font-size:12px;word-break:break-all}
 .hidden{display:none}
+input[type=text],input[type=password],input[type=number]{min-width:0;font-size:16px}
+button{min-height:44px;touch-action:manipulation;user-select:none}
+button:active{filter:brightness(.9)}button:disabled{opacity:.55;cursor:wait}
+:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+.check{display:flex;gap:8px;align-items:center;min-height:44px;color:var(--ink)}
+.url-row input{flex:1}.now>div{min-width:0;overflow-wrap:anywhere}
+.history-item{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
+.history-item img{width:112px;aspect-ratio:16/9;object-fit:cover;border-radius:8px;background:#000}
+.history-item .history-copy{flex:1;min-width:0;overflow-wrap:anywhere}
+#msg{position:sticky;bottom:0;background:var(--bg);padding:8px 0;overflow-wrap:anywhere}
+#msg:empty{display:none}
+@media (max-width:560px){
+  body{padding:20px max(12px,env(safe-area-inset-right)) max(20px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left))}
+  .row,.now,.history-item{flex-direction:column;align-items:stretch}
+  .row>button,button.primary,.history-item button{width:100%;min-height:48px}
+  .now img,.history-item img{width:100%;max-width:100%}.grid{grid-template-columns:1fr}
+  .card{padding:16px}h1{font-size:19px;letter-spacing:.08em}
+}
 </style>
 </head>
 <body><div class="wrap">
@@ -37,13 +56,16 @@ code{background:#0f0a1f;padding:2px 6px;border-radius:6px;font-size:12px;word-br
 
 <div class="card" id="login">
   <h2>登入</h2>
-  <label>管理密碼</label>
+  <label for="pw">管理密碼</label>
   <input type="password" id="pw" placeholder="輸入部署時設定的 ADMIN_PASSWORD" autocomplete="current-password">
+  <label class="check"><input type="checkbox" id="remember">在這台裝置記住我</label>
+  <div class="muted">只在信任的私人裝置勾選；未勾選時只保留於目前分頁。登出會清除這台瀏覽器儲存的密碼。</div>
   <div class="row" style="margin-top:12px"><button class="primary" id="btn-login">登入</button></div>
   <div id="login-msg" class="muted" style="margin-top:8px"></div>
 </div>
 
 <div id="panel" class="hidden">
+  <div class="row" style="justify-content:flex-end;margin-bottom:16px"><button id="btn-logout">登出</button></div>
   <div class="card">
     <h2>現場狀態</h2>
     <div class="grid"><div><div class="stat" id="s-online">0</div><div class="muted">在線</div></div><div><div class="stat" id="s-queue">0</div><div class="muted">排隊</div></div><div><div class="stat" id="s-max">0</div><div class="muted">人數上限</div></div></div>
@@ -54,14 +76,20 @@ code{background:#0f0a1f;padding:2px 6px;border-radius:6px;font-size:12px;word-br
   </div>
   <div class="card">
     <h2>更換大螢幕影片</h2>
-    <label>YouTube 網址（影片或直播都可以）</label>
-    <input type="text" id="url" placeholder="https://www.youtube.com/watch?v=... 或 https://youtu.be/... 或 /live/...">
-    <label>顯示名稱（選填）</label>
+    <label for="url">YouTube 網址（影片或直播都可以）</label>
+    <div class="row url-row"><input type="text" id="url" placeholder="https://www.youtube.com/watch?v=... 或 https://youtu.be/... 或 /live/..."><button id="btn-paste">貼上</button></div>
+    <div class="muted">／live／網址會自動勾選直播；一般 watch 網址的直播請手動勾選。</div>
+    <label for="title">顯示名稱（選填）</label>
     <input type="text" id="title" placeholder="例如：GENG vs BLG 決賽 第一場">
     <div class="row" style="margin-top:10px">
       <label style="margin:0;display:flex;gap:6px;align-items:center;color:var(--ink)"><input type="checkbox" id="live"> 這是直播（直播會跟著 YouTube 的即時畫面，不用同步進度）</label>
     </div>
     <div class="row" style="margin-top:12px"><button class="primary" id="btn-set">播放到大螢幕</button></div>
+  </div>
+  <div class="card">
+    <h2>最近播放</h2>
+    <div class="muted">只保存在這台瀏覽器，最多 10 筆；重播會立即更換所有人的大螢幕。</div>
+    <div id="history"></div>
   </div>
   <div class="card">
     <h2>播放控制（非直播影片）</h2>
@@ -82,16 +110,30 @@ code{background:#0f0a1f;padding:2px 6px;border-radius:6px;font-size:12px;word-br
     <div class="muted">在任何終端機執行：</div>
     <p><code id="curl"></code></p>
   </div>
-  <div id="msg"></div>
+  <div id="msg" role="status" aria-live="polite"></div>
 </div>
 </div>
 <script>
 const $ = s => document.querySelector(s);
-let pw = sessionStorage.getItem('hall-admin') || '';
+const credentialKey = 'hall-admin', historyKey = 'hall-admin-history';
+function stored(storage, key) { try { return window[storage].getItem(key) || ''; } catch (_) { return ''; } }
+function forgetCredentials() {
+  for (const storage of ['localStorage', 'sessionStorage']) try { window[storage].removeItem(credentialKey); } catch (_) { }
+}
+let pw = stored('sessionStorage', credentialKey) || stored('localStorage', credentialKey);
+let refreshTimer, authEpoch = 0;
+$('#remember').checked = !!stored('localStorage', credentialKey);
+function logout(message = '') {
+  authEpoch++; clearInterval(refreshTimer); forgetCredentials(); pw = '';
+  $('#pw').value = ''; $('#remember').checked = false;
+  $('#panel').classList.add('hidden'); $('#login').classList.remove('hidden');
+  $('#login-msg').textContent = message; $('#pw').focus();
+}
 async function api(path, body) {
+  const epoch = authEpoch;
   const r = await fetch('/api/admin/' + path, { method: body ? 'POST' : 'GET', headers: { 'Authorization': 'Bearer ' + pw, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.error || r.status);
+  if (!r.ok) { if (r.status === 401 && epoch === authEpoch) logout('登入已失效，請重新登入'); throw new Error(j.error || r.status); }
   return j;
 }
 function msg(t, ok = true) { const m = $('#msg'); m.textContent = t; m.className = ok ? 'ok' : 'bad'; }
@@ -104,19 +146,27 @@ function render(st) {
   if (st.maxUsers) { $('#s-max').textContent = st.maxUsers; if (document.activeElement !== $('#max')) $('#max').value = st.maxUsers; }
   if (st.online !== undefined) { $('#s-online').textContent = st.online; $('#s-queue').textContent = st.queue; }
 }
-async function refresh() { try { render(await api('state')); } catch (e) { } }
+async function refresh() { const epoch = authEpoch; try { const st = await api('state'); if (epoch === authEpoch) render(st); } catch (e) { } }
 async function login() {
+  const epoch = ++authEpoch; $('#btn-login').disabled = true;
   try {
-    const st = await api('state'); sessionStorage.setItem('hall-admin', pw);
+    const st = await api('state'); if (epoch !== authEpoch) return;
+    forgetCredentials();
+    let warning = '';
+    try { window[$('#remember').checked ? 'localStorage' : 'sessionStorage'].setItem(credentialKey, pw); }
+    catch (_) { warning = '瀏覽器無法儲存登入資料，此次登入僅保留到離開頁面。'; }
     $('#login').classList.add('hidden'); $('#panel').classList.remove('hidden'); render(st);
+    $('#pw').value = ''; $('#login-msg').textContent = ''; msg(warning);
     $('#curl').textContent = `curl -X POST ${location.origin}/api/admin/video -H "Authorization: Bearer <密碼>" -H "Content-Type: application/json" -d '{"url":"https://youtu.be/影片ID","live":false}'`;
-    setInterval(refresh, 3000);
-  } catch (e) { $('#login-msg').textContent = '密碼錯誤或無法連線'; sessionStorage.removeItem('hall-admin'); }
+    clearInterval(refreshTimer); refreshTimer = setInterval(refresh, 3000);
+  } catch (e) { if (epoch === authEpoch) logout('密碼錯誤或無法連線'); }
+  finally { $('#btn-login').disabled = false; }
 }
+$('#btn-logout').onclick = () => logout('已登出');
 $('#btn-login').onclick = () => { pw = $('#pw').value; login(); };
 $('#pw').onkeydown = e => { if (e.key === 'Enter') $('#btn-login').click(); };
 $('#btn-set').onclick = async () => {
-  try { const r = await api('video', { url: $('#url').value, live: $('#live').checked, title: $('#title').value }); render({ ...r, video: r.video }); msg('已更新，所有人的大螢幕都會換成這支影片'); }
+  try { await setVideo({ url: $('#url').value, live: $('#live').checked, title: $('#title').value }, $('#btn-set')); }
   catch (e) { msg('失敗：' + e.message, false); }
 };
 document.querySelectorAll('[data-a]').forEach(b => b.onclick = async () => { try { const r = await api('control', { action: b.dataset.a }); render(r); msg('已送出'); } catch (e) { msg('失敗：' + e.message, false); } });
@@ -126,7 +176,65 @@ $('#btn-seek').onclick = async () => {
   try { const r = await api('control', { action: 'seek', seconds: sec }); render(r); msg('已跳到 ' + fmt(sec)); } catch (e) { msg('失敗：' + e.message, false); }
 };
 $('#btn-max').onclick = async () => { try { const r = await api('settings', { maxUsers: Number($('#max').value) }); render(r); msg('人數上限已更新'); } catch (e) { msg('失敗：' + e.message, false); } };
-$('#url').addEventListener('input', () => { if (/\/live\//.test($('#url').value)) $('#live').checked = true; });
+function detectLive() {
+  try { const u = new URL($('#url').value.trim()); $('#live').checked = /(^|\.)youtube\.com$/.test(u.hostname) && /^\/live\//.test(u.pathname); }
+  catch (_) { $('#live').checked = false; }
+}
+$('#url').addEventListener('input', detectLive);
+$('#btn-paste').onclick = async () => {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (!text.trim()) throw new Error('empty');
+    $('#url').value = text.trim(); detectLive(); msg('已貼上網址');
+  } catch (_) { msg('無法讀取剪貼簿，請在網址欄手動貼上。', false); }
+  $('#url').focus();
+};
+function readHistory() {
+  try {
+    const items = JSON.parse(stored('localStorage', historyKey) || '[]');
+    return Array.isArray(items) ? items.filter(v => v && /^[\w-]{11}$/.test(v.id) && typeof v.title === 'string' && typeof v.live === 'boolean').slice(0, 10) : [];
+  } catch (_) { return []; }
+}
+let recent = readHistory();
+function renderHistory() {
+  const list = $('#history'); list.replaceChildren();
+  if (!recent.length) { const empty = document.createElement('p'); empty.className = 'muted'; empty.textContent = '還沒有播放紀錄'; list.append(empty); }
+  recent.forEach(v => {
+    const row = document.createElement('div'); row.className = 'history-item';
+    const image = document.createElement('img'); image.src = `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`; image.alt = ''; image.loading = 'lazy';
+    const copy = document.createElement('div'); copy.className = 'history-copy';
+    const title = document.createElement('div'); title.textContent = v.title;
+    const info = document.createElement('div'); info.className = 'muted'; info.textContent = v.live ? '直播' : '影片'; copy.append(title, info);
+    const button = document.createElement('button'); button.textContent = '重播'; button.setAttribute('aria-label', '重播：' + v.title);
+    button.onclick = async () => { try { await setVideo({ url: 'https://youtu.be/' + v.id, live: v.live, title: v.title }, button); } catch (e) { msg('失敗：' + e.message, false); } };
+    row.append(image, copy, button); list.append(row);
+  });
+}
+function persistHistory() {
+  renderHistory();
+  try { localStorage.setItem(historyKey, JSON.stringify(recent)); return true; }
+  catch (_) { return false; }
+}
+async function setVideo(body, button) {
+  if (button) button.disabled = true;
+  try {
+    const result = await api('video', body); render(result);
+    const v = result.video;
+    const entry = { id: v.id, live: v.live, title: v.title || `YouTube 影片（${v.id}）` };
+    recent = [entry, ...recent.filter(item => item.id !== v.id)].slice(0, 10);
+    const saved = persistHistory();
+    msg('已更新，所有人的大螢幕都會換成這支影片' + (saved ? '' : '。瀏覽器無法儲存最近播放紀錄。'));
+    if (!v.title) {
+      fetch('https://www.youtube.com/oembed?format=json&url=' + encodeURIComponent('https://www.youtube.com/watch?v=' + v.id), { signal: AbortSignal.timeout(5000), credentials: 'omit' })
+        .then(r => r.ok ? r.json() : null).then(data => {
+          if (!data || typeof data.title !== 'string' || !recent.includes(entry)) return;
+          entry.title = data.title.slice(0, 120); persistHistory();
+        }).catch(() => {});
+    }
+    return result;
+  } finally { if (button) button.disabled = false; }
+}
+renderHistory();
 if (pw) login();
 </script>
 </body></html>
