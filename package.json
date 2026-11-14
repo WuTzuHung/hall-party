@@ -4,7 +4,8 @@
   "description": "光之殿堂 3D 多人觀賽派對",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test"
   },
   "author": "",
   "license": "ISC",
