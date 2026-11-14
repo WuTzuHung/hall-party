@@ -16,7 +16,7 @@ function fixture() {
   const p = { getIframe: () => ({ style: {} }), getVideoData: () => ({ video_id: s.state.id }),
     mute() { calls.push('mute'); p.muted = true; }, unMute() { calls.push('unMute'); p.muted = false; },
     isMuted: () => p.muted, getPlayerState: () => p.state, setVolume: v => calls.push(['volume', v]),
-    playVideo: () => calls.push('playVideo'), state: 1, muted: true };
+    playVideo: () => calls.push('playVideo'), unloadModule: name => calls.push(['unload', name]), state: 1, muted: true };
   const api = () => {
     sandbox.YT = sandbox.window.YT = { Player: function (id, config) { calls.push(['create', config.videoId]); p.config = config; return p; } };
   };
@@ -60,4 +60,41 @@ test('autoplay block returns the button to pending and explicit mute is respecte
   s.setSound(true); assert.equal(active, true);
   p.config.events.onAutoplayBlocked(); assert.equal(active, false); assert.equal(p.muted, true);
   s.setSound(false); assert.equal(s.muted, true); assert.equal(active, false);
+});
+
+test('captions are disabled at readiness and again when a delayed module loads', () => {
+  const { s, p, calls, api, media } = fixture(); api(); s.setMedia(media); s.apply = () => {};
+  p.config.events.onApiChange();
+  assert.equal(calls.some(c => c[0] === 'unload'), false);
+  p.config.events.onReady();
+  assert.deepEqual(calls.filter(c => c[0] === 'unload'), [['unload', 'captions']]);
+  p.config.events.onApiChange();
+  assert.equal(calls.filter(c => c[0] === 'unload').length, 2);
+});
+
+test('each playing event disables captions after switching videos, including live media', () => {
+  const { s, p, calls, api, media } = fixture(); api(); s.setMedia(media); s.ready = true;
+  for (const id of ['yKZ7re9MAy4', 'C3GouGa0noM']) {
+    s.setState({ id, live: true, playing: true, position: 0, seq: id });
+    p.config.events.onStateChange({ data: 1 });
+  }
+  assert.deepEqual(calls.filter(c => c[0] === 'unload'), [['unload', 'captions'], ['unload', 'captions']]);
+  assert.equal(calls.includes('unMute'), false);
+});
+
+test('a missing or failing captions module does not interrupt playback setup', () => {
+  const { s, p, api, media } = fixture(); api(); s.setMedia(media); s.ready = true;
+  p.unloadModule = () => { throw new Error('module unavailable'); };
+  assert.doesNotThrow(() => p.config.events.onApiChange());
+  p.unloadModule = undefined;
+  assert.doesNotThrow(() => p.config.events.onApiChange());
+  assert.equal(s.ready, true);
+});
+
+test('existing sync tick clears captions even if YouTube changes the track without an API event', () => {
+  const { s, calls } = fixture(); s.ready = true;
+  s.player = { unloadModule: name => calls.push(['unload', name]) };
+  s.apply = () => {}; s.updateSound = () => {};
+  s.tick();
+  assert.deepEqual(calls, [['unload', 'captions']]);
 });
