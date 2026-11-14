@@ -297,6 +297,197 @@ export function stainedGlass(size = 768, variant = 0) {
   return toTex(c, { repeat: false });
 }
 
+// ---------- 橢圓彩繪玻璃天窗（依現場照片）：深藍菱格底、中央放射狀玫瑰窗、左右兩塊花卉畫板、琥珀色邊帶 ----------
+// 畫布長寬比 = 天窗的長寬比（長軸橫跨大廳），圖案直接畫成橢圓，不是把圓形拉長
+export function laylight(size = 1024, variant = 0, aspect = 1.64) {
+  setSeed(200 + variant);
+  const w = size, h = Math.round(size / aspect);
+  const c = canvas(w, h); const ctx = c.getContext('2d');
+  const cx = w / 2, cy = h / 2, A = w / 2, Bv = h / 2;
+  const LEAD = '#120d0a';
+  const pal = [
+    { navy: ['#0d1b40', '#13265a', '#0a1532'], line: 'rgba(214,224,255,0.82)', ring: ['#e8a33c', '#f2c14e', '#d07a2c', '#ffd98a'], a: ['#d85f6b', '#f08f8a', '#bf4860'], b: ['#5fa868', '#8fcf7a', '#3d8a52'], cA: ['#f6e7b8', '#ffd98a', '#f2c14e'], core: '#58b0a8', panel: ['#e9b65a', '#f3d9a0', '#d98a5a', '#c9685c', '#9fbf78', '#f6ead0'] },
+    { navy: ['#0c2238', '#12324e', '#0a1a2c'], line: 'rgba(206,232,236,0.82)', ring: ['#3f9a94', '#6cc2b6', '#2c7c80', '#a4e0d2'], a: ['#5c8fd0', '#8fb6ea', '#3d6cb0'], b: ['#58a890', '#8fd4b8', '#3a8a78'], cA: ['#e6f1e2', '#bfe6d6', '#8fd0c0'], core: '#e8c068', panel: ['#6fb7b0', '#a9d9cf', '#4f8fa8', '#7fa0d0', '#cfe6c8', '#e8f0e0'] },
+  ][variant % 2];
+  const pick = (p) => p[Math.floor(rand() * p.length)];
+  const lw = (k) => Math.max(1, size * k);
+  // 底：深藍 + 菱形格
+  ctx.fillStyle = pal.navy[0]; ctx.fillRect(0, 0, w, h);
+  const sp = w / 30;
+  for (let i = -2; i < w / sp + 2; i++) for (let j = -2; j < h / sp * 2 + 2; j++) { // 每格深淺略有不同
+    const x = i * sp + (j % 2 ? sp / 2 : 0), y = j * sp / 2;
+    ctx.fillStyle = pick(pal.navy); ctx.beginPath(); ctx.moveTo(x, y - sp / 2); ctx.lineTo(x + sp / 2, y); ctx.lineTo(x, y + sp / 2); ctx.lineTo(x - sp / 2, y); ctx.closePath(); ctx.fill();
+  }
+  ctx.strokeStyle = pal.line; ctx.lineWidth = lw(0.0026);
+  for (let k = -h; k < w + h; k += sp) { ctx.beginPath(); ctx.moveTo(k, 0); ctx.lineTo(k + h, h); ctx.stroke(); ctx.beginPath(); ctx.moveTo(k, h); ctx.lineTo(k + h, 0); ctx.stroke(); }
+  for (let i = -1; i < w / sp + 2; i++) for (let j = -1; j < h / sp * 2 + 2; j++) { // 交點的小方塊
+    const x = i * sp + (j % 2 ? sp / 2 : 0) + sp / 2, y = j * sp / 2; const r = sp * 0.11;
+    ctx.fillStyle = (i + j) % 3 ? pal.cA[0] : pal.ring[1]; ctx.fillRect(x - r, y - r, 2 * r, 2 * r);
+  }
+  // 一圈圈的拼色帶：圓環上 seg 片
+  const ringBand = (x0, y0, r0, r1, seg, colFn, rot = 0) => {
+    for (let k = 0; k < seg; k++) {
+      const a0 = rot + k / seg * Math.PI * 2, a1 = rot + (k + 1) / seg * Math.PI * 2;
+      ctx.beginPath(); ctx.arc(x0, y0, r1, a0, a1); ctx.arc(x0, y0, r0, a1, a0, true); ctx.closePath();
+      ctx.fillStyle = colFn(k); ctx.fill(); ctx.strokeStyle = LEAD; ctx.lineWidth = lw(0.0022); ctx.stroke();
+    }
+  };
+  const petal = (x0, y0, r0, r1, a, wide, col) => {
+    ctx.save(); ctx.translate(x0, y0); ctx.rotate(a); ctx.beginPath(); ctx.moveTo(r0, 0);
+    ctx.quadraticCurveTo((r0 + r1) / 2, -(r1 - r0) * wide, r1, 0); ctx.quadraticCurveTo((r0 + r1) / 2, (r1 - r0) * wide, r0, 0);
+    ctx.fillStyle = col; ctx.fill(); ctx.strokeStyle = LEAD; ctx.lineWidth = lw(0.0022); ctx.stroke(); ctx.restore();
+  };
+  // 左右花卉畫板（帶圓角的長方形），外面一圈琥珀色邊帶
+  const R = Bv * 0.80; // 玫瑰窗半徑
+  const pw = A * 0.30, ph = Bv * 0.74;
+  const rr = (x, y, ww, hh, r) => { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.lineTo(x + ww - r, y); ctx.quadraticCurveTo(x + ww, y, x + ww, y + r); ctx.lineTo(x + ww, y + hh - r); ctx.quadraticCurveTo(x + ww, y + hh, x + ww - r, y + hh); ctx.lineTo(x + r, y + hh); ctx.quadraticCurveTo(x, y + hh, x, y + hh - r); ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath(); };
+  for (const s of [-1, 1]) {
+    const px = cx + s * (R + A * 0.035 + pw / 2) - pw / 2, py = cy - ph / 2, bw = Bv * 0.07;
+    // 邊帶
+    rr(px - bw, py - bw, pw + 2 * bw, ph + 2 * bw, bw * 1.6); ctx.fillStyle = pal.ring[0]; ctx.fill(); ctx.strokeStyle = LEAD; ctx.lineWidth = lw(0.005); ctx.stroke();
+    ctx.save(); rr(px - bw, py - bw, pw + 2 * bw, ph + 2 * bw, bw * 1.6); ctx.clip();
+    for (let k = 0; k < 60; k++) { ctx.fillStyle = pick(pal.ring); const t = k / 60; ctx.fillRect(px - bw + t * (pw + 2 * bw), py - bw, (pw + 2 * bw) / 60 - 1, bw); ctx.fillRect(px - bw + t * (pw + 2 * bw), py + ph, (pw + 2 * bw) / 60 - 1, bw); }
+    for (let k = 0; k < 40; k++) { ctx.fillStyle = pick(pal.ring); const t = k / 40; ctx.fillRect(px - bw, py - bw + t * (ph + 2 * bw), bw, (ph + 2 * bw) / 40 - 1); ctx.fillRect(px + pw, py - bw + t * (ph + 2 * bw), bw, (ph + 2 * bw) / 40 - 1); }
+    ctx.restore();
+    // 畫板：碎玻璃拼成的花葉
+    rr(px, py, pw, ph, bw); ctx.fillStyle = pal.panel[5]; ctx.fill(); ctx.strokeStyle = LEAD; ctx.lineWidth = lw(0.004); ctx.stroke();
+    ctx.save(); rr(px, py, pw, ph, bw); ctx.clip();
+    for (let k = 0; k < 150; k++) {
+      const x = px + rand() * pw, y = py + rand() * ph, r = sp * (0.25 + rand() * 0.5), a = rand() * Math.PI;
+      ctx.fillStyle = pick(pal.panel); ctx.beginPath(); ctx.ellipse(x, y, r * 1.5, r * 0.7, a, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = 'rgba(20,12,8,0.75)'; ctx.lineWidth = lw(0.0016); ctx.stroke();
+    }
+    // 中央一朵大花 + 藤蔓
+    const fx = px + pw / 2, fy = cy;
+    ctx.strokeStyle = pal.b[2]; ctx.lineWidth = lw(0.005); ctx.beginPath(); ctx.moveTo(fx, py + ph * 0.05); ctx.bezierCurveTo(fx + pw * 0.4, cy - ph * 0.2, fx - pw * 0.4, cy + ph * 0.2, fx, py + ph * 0.95); ctx.stroke();
+    for (let k = 0; k < 8; k++) petal(fx, fy, sp * 0.3, sp * 1.7, k / 8 * Math.PI * 2 + 0.2, 0.42, pal.a[k % 3]);
+    for (let k = 0; k < 6; k++) { const yy = py + ph * (0.12 + 0.76 * k / 5); if (Math.abs(yy - fy) > sp * 1.9) petal(fx + Math.sin(k * 2.1) * pw * 0.14, yy, 0, sp * 1.2, k * 1.9, 0.45, pal.b[k % 3]); }
+    ctx.beginPath(); ctx.arc(fx, fy, sp * 0.36, 0, Math.PI * 2); ctx.fillStyle = pal.cA[2]; ctx.fill(); ctx.strokeStyle = LEAD; ctx.lineWidth = lw(0.002); ctx.stroke();
+    ctx.restore();
+    // 畫板與玫瑰窗之間的小圓窗
+    const rx = cx + s * (R + A * 0.035 + pw + bw + sp * 1.25);
+    ringBand(rx, cy, sp * 0.5, sp * 1.0, 10, (k) => pal.ring[k % 4]); ctx.beginPath(); ctx.arc(rx, cy, sp * 0.5, 0, Math.PI * 2); ctx.fillStyle = pal.core; ctx.fill(); ctx.strokeStyle = LEAD; ctx.lineWidth = lw(0.003); ctx.stroke();
+  }
+  // 中央玫瑰窗
+  ctx.beginPath(); ctx.arc(cx, cy, R * 1.035, 0, Math.PI * 2); ctx.fillStyle = LEAD; ctx.fill();
+  ringBand(cx, cy, R * 0.93, R, 48, (k) => pal.ring[(k * 7) % 4]);
+  ringBand(cx, cy, R * 0.70, R * 0.93, 24, (k) => (k % 2 ? pal.cA[0] : pal.cA[1]));
+  for (let k = 0; k < 24; k++) petal(cx, cy, R * 0.71, R * 0.92, (k + 0.5) / 24 * Math.PI * 2, 0.5, pal.b[k % 3]);
+  ringBand(cx, cy, R * 0.64, R * 0.70, 36, (k) => pal.a[k % 3]);
+  ringBand(cx, cy, R * 0.40, R * 0.64, 12, (k) => (k % 2 ? pal.cA[0] : pal.cA[2]));
+  for (let k = 0; k < 12; k++) { petal(cx, cy, R * 0.41, R * 0.63, (k + 0.5) / 12 * Math.PI * 2, 0.62, pal.a[k % 3]); petal(cx, cy, R * 0.47, R * 0.60, (k + 0.5) / 12 * Math.PI * 2, 0.3, pal.cA[1]); }
+  ringBand(cx, cy, R * 0.34, R * 0.40, 24, (k) => pal.ring[k % 4]);
+  ringBand(cx, cy, R * 0.16, R * 0.34, 12, (k) => (k % 2 ? pal.b[0] : pal.b[1]), Math.PI / 12);
+  for (let k = 0; k < 12; k++) petal(cx, cy, R * 0.02, R * 0.16, k / 12 * Math.PI * 2, 0.5, k % 2 ? pal.ring[1] : pal.a[1]);
+  ctx.beginPath(); ctx.arc(cx, cy, R * 0.05, 0, Math.PI * 2); ctx.fillStyle = pal.core; ctx.fill(); ctx.strokeStyle = LEAD; ctx.lineWidth = lw(0.003); ctx.stroke();
+  // 鐵件：12 根放射狀輻條與同心圓
+  ctx.strokeStyle = LEAD; ctx.lineCap = 'butt';
+  for (let k = 0; k < 12; k++) { const a = k / 12 * Math.PI * 2; ctx.lineWidth = lw(0.0052); ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * R * 0.05, cy + Math.sin(a) * R * 0.05); ctx.lineTo(cx + Math.cos(a) * R * 1.02, cy + Math.sin(a) * R * 1.02); ctx.stroke(); }
+  for (const r of [0.16, 0.40, 0.70, 0.93, 1.02]) { ctx.lineWidth = lw(r > 0.9 ? 0.007 : 0.0045); ctx.beginPath(); ctx.arc(cx, cy, R * r, 0, Math.PI * 2); ctx.stroke(); }
+  // 外緣：兩圈小片（琥珀、乳白），沿著橢圓
+  const eb = (d0, d1, seg, colFn) => {
+    for (let k = 0; k < seg; k++) {
+      const t0 = k / seg * Math.PI * 2, t1 = (k + 1) / seg * Math.PI * 2;
+      const P = (d, t) => [cx + (A - d * Bv) * Math.cos(t), cy + (Bv - d * Bv) * Math.sin(t)];
+      const a = P(d0, t0), b = P(d0, t1), c2 = P(d1, t1), d = P(d1, t0);
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.lineTo(c2[0], c2[1]); ctx.lineTo(d[0], d[1]); ctx.closePath();
+      ctx.fillStyle = colFn(k); ctx.fill(); ctx.strokeStyle = LEAD; ctx.lineWidth = lw(0.002); ctx.stroke();
+    }
+  };
+  eb(-0.02, 0.05, 150, (k) => pal.ring[(k * 5) % 4]); eb(0.05, 0.085, 180, (k) => (k % 2 ? pal.cA[0] : pal.navy[1]));
+  // 玻璃流紋與透光感（中央亮、邊緣略暗）
+  for (let i = 0; i < 1200; i++) {
+    const x = rand() * w, y = rand() * h, a = rand() * Math.PI, l = size * (0.006 + rand() * 0.02);
+    ctx.strokeStyle = rand() < 0.5 ? 'rgba(255,255,255,0.06)' : 'rgba(10,5,0,0.07)'; ctx.lineWidth = 1 + rand() * size * 0.003;
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); ctx.stroke();
+  }
+  ctx.save(); ctx.translate(cx, cy); ctx.scale(A / Bv, 1);
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, Bv);
+  g.addColorStop(0, 'rgba(255,246,220,0.16)'); g.addColorStop(0.65, 'rgba(255,236,190,0.0)'); g.addColorStop(1, 'rgba(8,6,12,0.34)');
+  ctx.fillStyle = g; ctx.fillRect(-Bv, -Bv, 2 * Bv, 2 * Bv); ctx.restore();
+  return toTex(c, { repeat: false });
+}
+
+// ---------- 鎏金石膏花邊（天窗外框、圓盤邊）：可沿 u 方向重複 ----------
+export function gildBand({ w = 512, h = 128 } = {}) {
+  setSeed(31);
+  const c = canvas(w, h); const ctx = c.getContext('2d');
+  const g0 = ctx.createLinearGradient(0, 0, 0, h); g0.addColorStop(0, '#d9c59a'); g0.addColorStop(0.5, '#f1e6c8'); g0.addColorStop(1, '#cdb684');
+  ctx.fillStyle = g0; ctx.fillRect(0, 0, w, h);
+  const gold = (y0, y1) => { const g = ctx.createLinearGradient(0, y0, 0, y1); g.addColorStop(0, '#8a6520'); g.addColorStop(0.45, '#f3d88a'); g.addColorStop(1, '#a8802e'); return g; };
+  // 上下兩道金色圓線
+  ctx.fillStyle = gold(0, h * 0.1); ctx.fillRect(0, 0, w, h * 0.1); ctx.fillStyle = gold(h * 0.9, h); ctx.fillRect(0, h * 0.9, w, h * 0.1);
+  // 珠串
+  const nb = 32; for (let k = 0; k < nb; k++) { const x = (k + 0.5) * w / nb; const r = h * 0.045; const g = ctx.createRadialGradient(x - r * 0.3, h * 0.17 - r * 0.3, 0, x, h * 0.17, r); g.addColorStop(0, '#fff3c4'); g.addColorStop(1, '#9a742a'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, h * 0.17, r, 0, Math.PI * 2); ctx.fill(); }
+  // 莨苕葉渦卷：每 1/8 寬重複一組（葉片 + 渦卷 + 花苞）
+  const n = 8, cw = w / n;
+  for (let k = 0; k < n; k++) {
+    const x0 = k * cw, cy = h * 0.56;
+    ctx.save(); ctx.shadowColor = 'rgba(70,48,10,0.6)'; ctx.shadowBlur = 3; ctx.shadowOffsetY = 2;
+    for (const s of [-1, 1]) {
+      ctx.strokeStyle = gold(h * 0.25, h * 0.85); ctx.lineWidth = h * 0.06; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(x0 + cw / 2, cy + h * 0.2); ctx.bezierCurveTo(x0 + cw / 2 + s * cw * 0.3, cy + h * 0.22, x0 + cw / 2 + s * cw * 0.46, cy - h * 0.1, x0 + cw / 2 + s * cw * 0.3, cy - h * 0.2);
+      ctx.bezierCurveTo(x0 + cw / 2 + s * cw * 0.16, cy - h * 0.27, x0 + cw / 2 + s * cw * 0.14, cy - h * 0.02, x0 + cw / 2 + s * cw * 0.27, cy - h * 0.06); ctx.stroke();
+      ctx.fillStyle = gold(h * 0.3, h * 0.8);
+      for (let j = 0; j < 3; j++) { ctx.save(); ctx.translate(x0 + cw / 2 + s * cw * (0.1 + j * 0.1), cy + h * (0.16 - j * 0.02)); ctx.rotate(s * (-0.9 - j * 0.3)); ctx.beginPath(); ctx.ellipse(0, -h * 0.09, h * 0.035, h * 0.1, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+    }
+    ctx.fillStyle = gold(h * 0.3, h * 0.8);
+    ctx.beginPath(); ctx.ellipse(x0 + cw / 2, cy - h * 0.02, h * 0.05, h * 0.17, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x0, cy, h * 0.075, 0, Math.PI * 2); ctx.arc(x0 + cw, cy, h * 0.075, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  const t = toTex(c); t.wrapT = THREE.ClampToEdgeWrapping; return t;
+}
+
+// ---------- 門廳天花的鎏金放射圓盤（吊燈座） ----------
+export function sunburst(size = 512) {
+  setSeed(32);
+  const c = canvas(size); const ctx = c.getContext('2d'); const m = size / 2;
+  ctx.fillStyle = '#eadfc4'; ctx.fillRect(0, 0, size, size);
+  const n = 48;
+  for (let k = 0; k < n; k++) {
+    const a0 = k / n * Math.PI * 2, a1 = (k + 1) / n * Math.PI * 2, am = (a0 + a1) / 2;
+    const g = ctx.createRadialGradient(m, m, m * 0.12, m, m, m * 0.82); g.addColorStop(0, '#f7dc8c'); g.addColorStop(0.6, k % 2 ? '#e2bd62' : '#cfa548'); g.addColorStop(1, k % 2 ? '#d9c08a' : '#c4a25a');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(m + Math.cos(a0) * m * 0.13, m + Math.sin(a0) * m * 0.13); ctx.lineTo(m + Math.cos(a0) * m * 0.80, m + Math.sin(a0) * m * 0.80);
+    ctx.quadraticCurveTo(m + Math.cos(am) * m * 0.86, m + Math.sin(am) * m * 0.86, m + Math.cos(a1) * m * 0.80, m + Math.sin(a1) * m * 0.80); ctx.lineTo(m + Math.cos(a1) * m * 0.13, m + Math.sin(a1) * m * 0.13); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(110,78,20,0.55)'; ctx.lineWidth = Math.max(1, size * 0.003); ctx.stroke();
+  }
+  // 外圈花邊：金線 + 珠串 + 葉片
+  for (const [r, wd, col] of [[0.985, 0.03, '#b08a36'], [0.9, 0.02, '#c9a24a'], [0.84, 0.014, '#a8802e']]) { ctx.strokeStyle = col; ctx.lineWidth = m * wd; ctx.beginPath(); ctx.arc(m, m, m * r - m * wd / 2, 0, Math.PI * 2); ctx.stroke(); }
+  for (let k = 0; k < 64; k++) { const a = k / 64 * Math.PI * 2, x = m + Math.cos(a) * m * 0.93, y = m + Math.sin(a) * m * 0.93; const g = ctx.createRadialGradient(x - 1, y - 1, 0, x, y, m * 0.024); g.addColorStop(0, '#fff3c4'); g.addColorStop(1, '#94702a'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, m * 0.022, 0, Math.PI * 2); ctx.fill(); }
+  // 中央花座
+  const g = ctx.createRadialGradient(m - m * 0.03, m - m * 0.03, 0, m, m, m * 0.15); g.addColorStop(0, '#fff0b8'); g.addColorStop(1, '#8c6520');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(m, m, m * 0.14, 0, Math.PI * 2); ctx.fill();
+  for (let k = 0; k < 12; k++) { const a = k / 12 * Math.PI * 2; ctx.fillStyle = k % 2 ? '#e6c670' : '#b8892f'; ctx.beginPath(); ctx.ellipse(m + Math.cos(a) * m * 0.09, m + Math.sin(a) * m * 0.09, m * 0.05, m * 0.022, a, 0, Math.PI * 2); ctx.fill(); }
+  return toTex(c, { repeat: false });
+}
+
+// ---------- 獎盃底座的深色銘牌：只有一排排看不清的細刻線，不是真的文字 ----------
+export function plaque() {
+  setSeed(33);
+  const w = 256, h = 128; const c = canvas(w, h); const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, w, h); g.addColorStop(0, '#0b0c10'); g.addColorStop(0.5, '#15171d'); g.addColorStop(1, '#08090c');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = 'rgba(210,214,224,0.35)'; ctx.lineWidth = 1.5; ctx.strokeRect(5, 5, w - 10, h - 10);
+  const col = (cx, y0, rows) => { for (let r = 0; r < rows; r++) { const ww = r < 2 ? 26 + rand() * 16 : 12 + rand() * 16; ctx.fillStyle = `rgba(222,226,236,${r < 2 ? 0.5 : 0.32})`; ctx.fillRect(cx - ww / 2, y0 + r * 7, ww, r < 2 ? 2.4 : 1.6); } };
+  col(52, 16, 7); col(128, 14, 7); col(204, 12, 7); col(92, 70, 7); col(168, 66, 7);
+  return toTex(c, { repeat: false });
+}
+
+// 四角星芒（獎盃閃光）
+export function star() {
+  const s = 128, c = canvas(s); const ctx = c.getContext('2d'); const img = ctx.createImageData(s, s);
+  for (let y = 0; y < s; y++) for (let x = 0; x < s; x++) {
+    const px = (x + 0.5) / s - 0.5, py = (y + 0.5) / s - 0.5, d = Math.hypot(px, py);
+    const ray = (a, b, k) => Math.exp(-Math.abs(a) * k) * Math.max(0, 1 - Math.abs(b) * 2.05) ** 2;
+    const dx = (px + py) * 0.7071, dy = (px - py) * 0.7071;
+    let v = Math.exp(-d * d * 260) + 0.9 * (ray(py, px, 90) + ray(px, py, 90)) + 0.35 * (ray(dy, dx, 120) * Math.max(0, 1 - Math.abs(dx) * 4) + ray(dx, dy, 120) * Math.max(0, 1 - Math.abs(dy) * 4));
+    v = Math.min(1, v) * Math.max(0, 1 - d * 2); const i = (y * s + x) * 4;
+    img.data[i] = img.data[i + 1] = img.data[i + 2] = 255 * v; img.data[i + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return toTex(c, { repeat: false });
+}
+
 // ---------- 文字橫幅 ----------
 export function textTexture(lines, { w = 2048, h = 160, bg = 'rgba(0,0,0,0)', color = '#6b5c46', font = '700 96px "Cinzel", "Times New Roman", serif', letter = 18, shadow = null, engrave = null, border = null, fit = 0 } = {}) {
   const c = canvas(w, h); const ctx = c.getContext('2d');
