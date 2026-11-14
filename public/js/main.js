@@ -420,6 +420,7 @@ function connect() {
       case 'media': onMedia(m.m); break;
       case 'video': screen.setState(m.video); break;
       case 'seats': setSeatOcc(m.s); break;
+      case 'lights': applyLights(m.on); break;
       case 'sitOk': break;
       case 'sitNo':
         if (me.seat && me.seat.i === Number(m.seat)) { standUp(); toast('這個位子有人坐了'); }
@@ -449,6 +450,14 @@ $('#btn-kicked').addEventListener('click', () => location.reload());
 function onMedia(m) {
   mediaState = m; screen.setMedia(m); dock.setMedia(m);
 }
+// 室內燈（管理員控制，伺服器同步）：記住最新值；world.setLights 由 world.js 提供（還沒有時先略過，之後 applyLights() 會補上）
+let lightsOn = true;
+function applyLights(on) {
+  if (typeof on === 'boolean') lightsOn = on;
+  document.body.classList.toggle('lights-off', !lightsOn);
+  world?.setLights?.(lightsOn);
+  dock?.setLights?.(lightsOn);
+}
 // 播放器回報（片長、播完、無法播放），讓伺服器決定何時換下一首／比賽結束回到音樂
 screen.onReport = (msg) => wsSend(msg);
 
@@ -463,6 +472,7 @@ function onWelcome(m) {
   previews.length = 0;
   setSeatOcc(m.seats);
   if (m.media) onMedia(m.media); else screen.setState(m.video);
+  applyLights(m.lights);
   for (const p of m.players) addRemote(p.id, p.c, p);
   if (firstEntry) {
     entered = true;

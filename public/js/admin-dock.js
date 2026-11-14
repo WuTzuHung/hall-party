@@ -10,7 +10,7 @@ function storedPw() {
 
 export function initAdminDock({ toast, onFocus, isTouch }) {
   const dock = $('#admin-dock'), panel = $('#ad-panel');
-  let pw = '', media = null, active = false, open = false;
+  let pw = '', media = null, active = false, open = false, lights = true;
   async function api(path, body) {
     const r = await fetch('/api/admin/' + path, {
       method: body ? 'POST' : 'GET', cache: 'no-store', credentials: 'same-origin',
@@ -44,6 +44,13 @@ export function initAdminDock({ toast, onFocus, isTouch }) {
   function render(st) {
     const m = st.mode ? { mode: st.mode, video: st.video, music: st.music, countdown: st.countdown } : st;
     if (m && m.mode) setMedia(m);
+    if (typeof st.lights === 'boolean') setLights(st.lights);
+  }
+  // 室內燈按鈕：燈開著時顯示「關燈」（亮金色），關著時顯示「開燈」（暗色）
+  function setLights(on) {
+    lights = !!on; const b = $('#ad-lights'); if (!b) return;
+    b.textContent = lights ? '💡 關燈' : '💡 開燈'; b.classList.toggle('off', !lights);
+    b.setAttribute('aria-pressed', String(lights)); b.title = '室內燈：' + (lights ? '開' : '關');
   }
   function setMedia(m) {
     media = m; if (!active) return;
@@ -79,6 +86,7 @@ export function initAdminDock({ toast, onFocus, isTouch }) {
   $('#ad-fwd').addEventListener('click', () => act(() => api('control', { action: 'skip', seconds: 10 }), '+10 秒'));
   $('#ad-next').addEventListener('click', () => act(() => api('music', { action: 'next' }), '下一首'));
   $('#ad-music').addEventListener('click', () => act(() => api('mode', { mode: 'music' }), '已回到大廳音樂'));
+  $('#ad-lights').addEventListener('click', () => { const on = !lights; act(() => api('lights', { on }), on ? '室內燈已開' : '室內燈已關'); });
   $('#ad-url').addEventListener('input', () => { if (/\/live\//.test($('#ad-url').value)) $('#ad-live').checked = true; });
   $('#ad-form').addEventListener('submit', (e) => {
     e.preventDefault();
@@ -114,5 +122,5 @@ export function initAdminDock({ toast, onFocus, isTouch }) {
   });
 
   check();
-  return { setMedia, check, get active() { return active; } };
+  return { setMedia, setLights, check, get active() { return active; } };
 }

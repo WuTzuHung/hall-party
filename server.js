@@ -63,6 +63,7 @@ const defaults = {
     playing: true, startedAt: Date.now(), pausedAt: 0, seq: 0,
   },
   countdown: null, // { at, id, start, live, title }
+  lights: true, // 室內燈（管理員控制，所有人同步）
 };
 let state = structuredClone(defaults);
 try {
@@ -70,6 +71,7 @@ try {
   state = { ...state, ...saved, video: { ...state.video, ...(saved.video || {}) }, music: { ...state.music, ...(saved.music || {}) } };
   if (!Array.isArray(state.music.list)) state.music.list = [];
   if (state.mode !== 'match') state.mode = 'music';
+  if (typeof state.lights !== 'boolean') state.lights = true;
   if (state.music.index >= state.music.list.length) state.music.index = state.music.list.length ? 0 : -1;
 } catch (_) { /* 第一次啟動 */ }
 if (state.mode === 'music' && state.music.list.length && state.music.index < 0) startTrack(0);
@@ -154,6 +156,7 @@ function adminState() {
     mode: state.mode, serverTime: Date.now(), version: VERSION,
     music: { ...publicMedia().music, list: state.music.list.map(x => ({ id: x.id, title: x.title || '', live: !!x.live, dur: x.dur || 0 })) },
     countdown: state.countdown ? { ...state.countdown } : null,
+    lights: state.lights,
   };
 }
 function broadcastMedia() { broadcast({ t: 'media', m: publicMedia() }); }
@@ -264,7 +267,7 @@ function admit(ws) {
   ws._playerId = p.id;
   send(ws, {
     t: 'welcome', id: p.id, name, serverTime: Date.now(), media: publicMedia(), video: publicVideo(), max: state.maxUsers,
-    token: signToken(uid), version: VERSION, seats: seatList(),
+    token: signToken(uid), version: VERSION, seats: seatList(), lights: state.lights,
     players: [...players.values()].filter(o => o.id !== p.id && o.ws).map(o => ({ id: o.id, c: o.color, n: o.name, x: o.x, y: o.y, z: o.z, ry: o.ry, a: o.anim })),
   });
   broadcast({ t: 'join', id: p.id, c: p.color, n: name, x: p.x, y: p.y, z: p.z, ry: p.ry }, ws);
@@ -326,6 +329,15 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && p === '/api/admin/state') return json(res, 200, adminState());
     if (req.method !== 'POST') return json(res, 405, { error: 'method' });
     const body = await readBody(req);
+    if (p === '/api/admin/lights') {
+      // 室內燈：{ on: true|false } 或 { toggle: true }；只廣播 { t:'lights', on }，不動播放狀態
+      if (body.toggle === true) state.lights = !state.lights;
+      else if (typeof body.on === 'boolean') state.lights = body.on;
+      else return json(res, 400, { error: '請提供 on（true／false）或 toggle: true' });
+      save();
+      broadcast({ t: 'lights', on: state.lights });
+      return json(res, 200, adminState());
+    }
     if (p === '/api/admin/video') {
       // 開始比賽：自動切到比賽模式，大廳音樂停止
       const parsed = parseYouTube(body.url);

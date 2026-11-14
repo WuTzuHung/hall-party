@@ -87,6 +87,22 @@ input.dt{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(2
   #bookmark-pending input[type=number]{max-width:100%}
 }
 </style>
+<style>
+/* 室內燈光 */
+#lights-card .lt-row{display:flex;align-items:center;gap:14px}
+#lights-card .lt-state{flex:1;min-width:0;font-size:15px}
+#lights-card .lt-state b{font-size:20px;color:var(--gold);margin-left:4px}
+#lights-card.off .lt-state b{color:var(--muted)}
+#lt-switch{position:relative;display:inline-flex;align-items:center;gap:10px;padding:8px 16px 8px 8px;border-radius:999px;border:1px solid rgba(224,189,106,.55);background:rgba(224,189,106,.16);min-height:48px}
+#lt-switch .knob{position:relative;width:52px;height:30px;border-radius:999px;background:linear-gradient(180deg,#f6dc95,#d4a748);box-shadow:0 0 14px rgba(224,189,106,.45);transition:background .25s,box-shadow .25s}
+#lt-switch .knob::after{content:"";position:absolute;top:3px;left:25px;width:24px;height:24px;border-radius:50%;background:#1b1206;transition:left .25s}
+#lights-card.off #lt-switch{border-color:rgba(255,255,255,.16);background:#0f0a1f}
+#lights-card.off #lt-switch .knob{background:#3a3150;box-shadow:none}
+#lights-card.off #lt-switch .knob::after{left:3px;background:#bdb3cc}
+#lt-switch:disabled{cursor:wait}
+@media (prefers-reduced-motion:reduce){#lt-switch .knob,#lt-switch .knob::after{transition:none}}
+@media (max-width:560px){#lights-card .lt-row{flex-direction:row}#lt-switch{width:auto}}
+</style>
 </head>
 <body><div class="wrap">
 <h1>HALL DES LUMIÈRES</h1>
@@ -170,6 +186,17 @@ input.dt{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(2
     <div class="muted">在任何終端機執行：</div>
     <p><code id="curl"></code></p>
   </div>
+  <!-- ===== 室內燈光（獨立區塊） ===== -->
+  <div class="card" id="lights-card">
+    <h2>室內燈光</h2>
+    <div class="lt-row">
+      <div class="lt-state">目前<b id="lt-state">開</b></div>
+      <button id="lt-switch" type="button" role="switch" aria-checked="true" aria-label="室內燈"><span class="knob" aria-hidden="true"></span><span id="lt-label">關燈</span></button>
+    </div>
+    <div class="muted" style="margin-top:8px">切換後殿堂內所有人的室內燈會同步變暗或亮起（大螢幕照常播放）。</div>
+    <div id="lt-msg" class="muted" role="status" aria-live="polite" style="margin-top:6px"></div>
+  </div>
+  <!-- ===== /室內燈光 ===== -->
   <!-- ===== 大廳音樂與開賽倒數（獨立區塊） ===== -->
   <div class="card" id="music-card">
     <h2>大廳音樂 <span id="mu-mode" class="chip"></span></h2>
@@ -241,6 +268,7 @@ function render(st) {
   $('#now-info').textContent = v.live ? '直播中' : `${v.playing ? '播放中' : '已暫停'} · 進度 ${fmt(v.position)}`;
   if (st.maxUsers) { $('#s-max').textContent = st.maxUsers; if (document.activeElement !== $('#max')) $('#max').value = st.maxUsers; }
   if (st.online !== undefined) { $('#s-online').textContent = st.online; $('#s-queue').textContent = st.queue; }
+  if (typeof st.lights === 'boolean' && window.renderLights) window.renderLights(st.lights);
 }
 async function refresh() { const epoch = authEpoch; try { const st = await api('state'); if (epoch === authEpoch) render(st); } catch (e) { } }
 async function login() {
@@ -491,6 +519,26 @@ if (pw) login();
   };
   parsePending(); updateTime(); showPending();
   new MutationObserver(showPending).observe($('#panel'), { attributes: true, attributeFilter: ['class'] });
+})();
+</script>
+<script>
+// ===== 室內燈光 =====
+(() => {
+  let on = true;
+  window.renderLights = (v) => {
+    on = !!v;
+    document.querySelector('#lights-card').classList.toggle('off', !on);
+    document.querySelector('#lt-state').textContent = on ? '開' : '關';
+    document.querySelector('#lt-label').textContent = on ? '關燈' : '開燈';
+    document.querySelector('#lt-switch').setAttribute('aria-checked', String(on));
+  };
+  const btn = document.querySelector('#lt-switch'), say = (t, ok = true) => { const m = document.querySelector('#lt-msg'); m.textContent = t; m.className = ok ? 'ok' : 'bad'; };
+  btn.onclick = async () => {
+    const want = !on; btn.disabled = true;
+    try { render(await api('lights', { on: want })); say(want ? '室內燈已開' : '室內燈已關'); }
+    catch (e) { say('失敗：' + e.message, false); }
+    finally { btn.disabled = false; }
+  };
 })();
 </script>
 </body></html>
