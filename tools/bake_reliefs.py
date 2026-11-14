@@ -44,6 +44,10 @@ def bake(src, name, out, stone=(226, 214, 192), tone=0.55, glow_cfg=None, window
     halo = np.clip(gauss(core, 5) * 1.6 + gauss(core, 16) * 2.2, 0, 1)
     glow = np.stack([core, halo, np.clip(gauss(core, 2.2) * 1.5, 0, 1)], 2)
     gi = Image.fromarray((glow * 255 + 0.5).astype(np.uint8), 'RGB').resize((1024, round(1024 * H / W)), Image.LANCZOS)
+    if name == 'relief-a':  # 右側人物的臉上不要有閃光（使用者要求）：把臉部範圍的發光遮罩清掉
+        from PIL import ImageDraw, ImageFilter
+        fm = Image.new('L', gi.size, 0); ImageDraw.Draw(fm).ellipse((776, 388, 876, 512), fill=255); fm = fm.filter(ImageFilter.GaussianBlur(5))
+        gi = Image.composite(Image.new('RGB', gi.size, (0, 0, 0)), gi, fm)
     gi.save(os.path.join(out, name + '-glow.jpg'), quality=88)
     # ---- 高度：把光帶補成石材色，再用多尺度模糊亮度當高度 ----
     small = Image.fromarray((L * 255).astype(np.uint8), 'L').resize((W // 2, H // 2), Image.BILINEAR).filter(ImageFilter.MedianFilter(25))
