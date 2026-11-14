@@ -3,6 +3,8 @@
 // 任何訊息超過 5 分鐘也會自動隱藏並移除。伺服器不保存聊天，新進場的人從空白開始。
 // 測試時可用 window.__CHAT_DEBUG = { max, ttl, removeAfter } 暫時縮短時間（毫秒）
 
+import './chat-filter.js';
+const { filterChat, CONTACT_NOTICE } = globalThis.HallChatFilter;
 const $ = (s) => document.querySelector(s);
 const cfg = () => ({ max: 15, ttl: 5 * 60 * 1000, removeAfter: 10 * 1000, ...(window.__CHAT_DEBUG || {}) });
 export const CHAT_MAX = 120;
@@ -37,10 +39,12 @@ export function initChat({ send, isTouch, onFocus, onBlur, toast }) {
     e.preventDefault();
     const text = Array.from(input.value.replace(/[\u0000-\u001f\u007f]/g, '').trim()).slice(0, CHAT_MAX).join('');
     if (!text) { input.blur(); return; }
+    const filtered = filterChat(text);
+    if (!filtered.ok) { toast && toast(CONTACT_NOTICE); return; }
     const now = Date.now();
     while (sentAt.length && now - sentAt[0] > 5000) sentAt.shift();
     if (sentAt.length >= 5 || (sentAt.length && now - sentAt[sentAt.length - 1] < 800)) { toast && toast('訊息送太快了，稍等一下再送'); return; }
-    if (!send(text)) { toast && toast('尚未連線，訊息沒有送出'); return; }
+    if (!send(filtered.text)) { toast && toast('尚未連線，訊息沒有送出'); return; }
     sentAt.push(now);
     input.value = '';
     if (!isTouch) input.blur(); // 桌機：送出後馬上可以繼續走動；手機保留鍵盤方便連續聊天

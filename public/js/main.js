@@ -293,10 +293,19 @@ document.querySelectorAll('canvas.preview').forEach((c) => {
   previews.push({ r, s, a, cm, c });
 });
 // 名字：記在 localStorage，沒填就用「訪客####」
+const { filterChat: filterName } = globalThis.HallChatFilter; // chat.js 已載入共用模組
+const validName = (name) => { const f = filterName(name); return f.ok && f.text === name; };
 const nameInput = $('#name-input');
 const cleanName = (v) => Array.from(String(v || '').replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff<>]/g, '').replace(/\s+/g, ' ').trim()).slice(0, 16).join('').trim();
 let defaultName = '訪客' + String(1000 + Math.floor(Math.random() * 9000));
-try { const saved = localStorage.getItem('hall-name'); if (saved) nameInput.value = cleanName(saved); const d = localStorage.getItem('hall-default-name'); if (d) defaultName = d; else localStorage.setItem('hall-default-name', defaultName); } catch (_) { }
+try {
+  const saved = localStorage.getItem('hall-name');
+  if (saved && validName(cleanName(saved))) nameInput.value = cleanName(saved);
+  else if (saved) localStorage.removeItem('hall-name');
+  const d = cleanName(localStorage.getItem('hall-default-name'));
+  if (d && validName(d)) defaultName = d;
+  else localStorage.setItem('hall-default-name', defaultName);
+} catch (_) { }
 nameInput.placeholder = defaultName;
 nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); nameInput.blur(); if (chosen) $('#btn-enter').click(); } });
 let chosen = null;
@@ -307,8 +316,10 @@ document.querySelectorAll('.choice').forEach(b => b.addEventListener('click', ()
 }));
 $('#btn-enter').addEventListener('click', () => {
   if (!chosen) return;
+  const name = cleanName(nameInput.value);
+  if (!validName(name)) { status('名字不能包含不雅字眼或聯絡方式，請換一個'); nameInput.focus(); return; }
   me.color = chosen;
-  me.name = cleanName(nameInput.value) || defaultName; nameInput.value = cleanName(nameInput.value);
+  me.name = name || defaultName; nameInput.value = name;
   try { if (nameInput.value) localStorage.setItem('hall-name', nameInput.value); else localStorage.removeItem('hall-name'); } catch (_) { }
   setSound(true); // 使用者點擊時解除靜音（瀏覽器規定需要互動）
   status('連線中…');

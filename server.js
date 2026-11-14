@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
+const { filterChat } = require('./public/js/chat-filter.js');
 
 const PORT = Number(process.env.PORT || 3000);
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'changeme';
@@ -229,6 +230,8 @@ wss.on('connection', (ws) => {
       if (ws._playerId || queue.includes(ws)) return;
       ws._color = m.color === 'blue' ? 'blue' : 'pink';
       ws._name = cleanText(m.name, NAME_MAX);
+      const name = filterChat(ws._name);
+      ws._name = name.ok ? name.text : ''; // 空白會由 admit 產生預設訪客名稱
       if (players.size < state.maxUsers) admit(ws);
       else { queue.push(ws); broadcastQueue(); }
     } else if (m.t === 'p' && ws._playerId) {
@@ -247,8 +250,9 @@ wss.on('connection', (ws) => {
       ws._chat = ws._chat.filter(t => now - t < 5000);
       if (ws._chat.length >= 5 || (ws._chat.length && now - ws._chat[ws._chat.length - 1] < 800)) return; // 限流：0.8 秒 1 則、5 秒最多 5 則
       const text = cleanText(m.text, CHAT_MAX); if (!text) return;
+      const filtered = filterChat(text); if (!filtered.ok) return;
       ws._chat.push(now);
-      broadcast({ t: 'chat', id: p.id, name: p.name, color: p.color, text });
+      broadcast({ t: 'chat', id: p.id, name: p.name, color: p.color, text: filtered.text });
     } else if (m.t === 'info' && ws._playerId && Array.isArray(m.ids)) {
       // 用戶端遇到不認得的玩家時補要名字與顏色
       const list = [];
