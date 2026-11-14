@@ -250,3 +250,13 @@ body.has-dock:not(.touch) #hint{bottom:64px}
 body.touch #ad-login input{font-size:16px}
 #ad-login button{padding:0 16px;height:36px;border-radius:10px;border:1px solid var(--line);background:rgba(224,189,106,.15);color:var(--ink);font-weight:700}
 #ad-login-msg{flex-basis:100%;min-height:0;color:#ff7b8a}
+/* 入場後的古典金色游標；鎖定與觸控仍由原有操作處理。 */
+@media (hover:hover) and (pointer:fine){
+  body:not(.touch):not(.locked):has(#hud:not(.hidden)){
+    --cursor-gold-arrow:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M3 2L4 26L10 20L15 30L20 27L15 17L24 16Z' fill='%23e0bd6a' stroke='%23291b08' stroke-width='2' stroke-linejoin='round'/%3E%3Cpath d='M6 7L7 20L11 16L17 15Z' fill='%23fff0bb'/%3E%3C/svg%3E") 3 2,default;
+    --cursor-gold-pointer:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M11 17V4Q11 1 14 2Q16 2 16 5V12Q19 10 21 13Q24 12 25 15Q29 14 29 19L27 29H13L5 20Q3 17 6 16Q8 15 11 20Z' fill='%23e0bd6a' stroke='%23291b08' stroke-width='2' stroke-linejoin='round'/%3E%3Cpath d='M13 5V15M18 15V20M23 16V21' fill='none' stroke='%23fff0bb' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") 14 3,pointer;
+    cursor:var(--cursor-gold-arrow);
+  }
+  body:not(.touch):not(.locked):has(#hud:not(.hidden)) :is(button:not(:disabled),a[href],[role=button]){cursor:var(--cursor-gold-pointer)}
+  body:not(.touch):not(.locked):has(#hud:not(.hidden)) :is(input,textarea,[contenteditable=true]){cursor:text}
+}
