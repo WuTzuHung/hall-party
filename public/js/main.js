@@ -129,12 +129,20 @@ function unlockPointer() { if (locked()) try { document.exitPointerLock(); } cat
 document.addEventListener('pointerlockchange', () => { document.body.classList.toggle('locked', locked()); if (locked()) pointers.clear(); });
 document.addEventListener('mousemove', (e) => {
   if (!locked() || !canLook()) return;
-  const k = 0.0022;
+  const k = 0.0022 * (camera.fov / 60);
   cam.yaw -= e.movementX * k; cam.pitch = THREE.MathUtils.clamp(cam.pitch + e.movementY * k, -1.2, 1.35);
 });
 let downAt = null;
 
-const pointers = new Map(); let pinchD = 0;
+const pointers = new Map(); let pinchD = 0, targetFov = 60;
+function zoomSeat(f) {
+  if (viewMode !== 'seat' || cam.targetDist !== 0) return false;
+  if (f < 1 || targetFov < 60 || camera.fov < 60) {
+    targetFov = THREE.MathUtils.clamp(targetFov * f, 20, 60);
+    return true;
+  }
+  return false;
+}
 canvas.addEventListener('pointerdown', (e) => {
   if (chat && chat.focused) chat.input.blur();
   if (e.pointerType === 'mouse') { downAt = { x: e.clientX, y: e.clientY, t: performance.now() }; if (locked()) return; }
@@ -160,13 +168,17 @@ canvas.addEventListener('pointermove', (e) => {
     const [a, b] = [...pointers.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y);
     if (pinchD) {
       if (viewMode === 'best') bestD = THREE.MathUtils.clamp(bestD * (pinchD / d), 6, 42);
-      else if (viewMode !== 'full') cam.targetDist = THREE.MathUtils.clamp(cam.targetDist * (pinchD / d), cam.minD, cam.maxD);
+      else if (viewMode !== 'full' && !zoomSeat(pinchD / d)) {
+        const f = pinchD / d;
+        cam.targetDist = viewMode === 'seat' && cam.targetDist < 0.3 && f > 1 ? 0.8 : THREE.MathUtils.clamp(cam.targetDist * f, cam.minD, cam.maxD);
+        if (viewMode === 'seat' && cam.targetDist < 0.45 && f < 1) cam.targetDist = 0;
+      }
     }
     pinchD = d; return;
   }
   const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
   if (viewMode === 'best' || viewMode === 'full') return;
-  const k = isTouch ? 0.006 : 0.0045;
+  const k = (isTouch ? 0.006 : 0.0045) * (camera.fov / 60);
   cam.yaw -= dx * k; cam.pitch = THREE.MathUtils.clamp(cam.pitch + dy * k, -1.2, 1.35);
 });
 canvas.addEventListener('pointerup', (e) => {
@@ -185,6 +197,7 @@ canvas.addEventListener('wheel', (e) => {
   const f = Math.exp(e.deltaY * 0.0012);
   if (viewMode === 'best') { bestD = THREE.MathUtils.clamp(bestD * f, 6, 42); return; }
   if (viewMode === 'full') return;
+  if (zoomSeat(f)) return;
   cam.targetDist = cam.targetDist < 0.3 && e.deltaY > 0 ? 0.8 : THREE.MathUtils.clamp(cam.targetDist * f, cam.minD, cam.maxD);
   if (cam.targetDist < 0.45 && e.deltaY < 0) cam.targetDist = 0;
 }, { passive: false });
@@ -254,6 +267,10 @@ function seatView() {
   cam.dist = cam.targetDist = 0;
 }
 function setMode(m) {
+  if (m !== 'seat' || viewMode !== 'seat') {
+    targetFov = camera.fov = 60;
+    camera.updateProjectionMatrix();
+  }
   viewMode = m;
   if (!canLook()) unlockPointer();
   document.body.classList.toggle('seated', m === 'seat' || m === 'best');
@@ -580,6 +597,11 @@ function updateMe(dt) {
 
 const fullPos = new THREE.Vector3(), bestPos = new THREE.Vector3();
 function updateCamera(dt) {
+  if (camera.fov !== targetFov) {
+    camera.fov += (targetFov - camera.fov) * Math.min(1, dt * 8);
+    if (Math.abs(camera.fov - targetFov) < 0.01) camera.fov = targetFov;
+    camera.updateProjectionMatrix();
+  }
   if (viewMode === 'best' || viewMode === 'full') {
     let d;
     if (viewMode === 'full') {
