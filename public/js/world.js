@@ -8,6 +8,7 @@ import * as T from './textures.js';
 import { buildTrophy } from './trophy.js';
 import { reliefPanel } from './relief.js';
 import { buildPoster } from './poster.js';
+import { buildWallDistrict, inTheater } from './district.js';
 
 export const SCREEN = { x: 0, y: 6.14, z: -57.9, w: 14, h: 7.875 };
 export const HALL = { x0: -14, x1: 14, z0: -58, z1: -6 };
@@ -169,23 +170,29 @@ export function buildWorld(scene, renderer, q) {
   buildStreet(scene, anim);
   buildFacade(scene, anim, q);
   buildInterior(scene, anim, q, renderer);
+  const district = buildWallDistrict(W, scene, anim, q);
 
   B.build(scene);
+  zoneLights(district);
 
   // 室內燈光開關：world.setLights(true|false)；預設開燈。相機位置由 scene.onBeforeRender 取得（不需要改 main.js）
   scene.onBeforeRender = (_r, _s, camera) => { LIGHT.cam.copy(camera.position); };
   const night = { sky: 0x7d78c8, ground: 0x4a3050, i: 0.42 };
   onLights((e, inside) => {
     // 半球光：街上永遠是夜晚；進到室內才換成室內的環境光
-    mixColor(hemi.color, 0x64548a, 0xfff2de, e).lerp(_c1.set(night.sky), 1 - inside);
-    mixColor(hemi.groundColor, 0x3c2832, 0xe9d9bd, e).lerp(_c1.set(night.ground), 1 - inside);
-    hemi.intensity = lerp(night.i, lerp(0.2, 1.15, e), inside);
+    // 城牆區的戶外：月光比較亮、偏冷，石牆才看得出質感
+    const nSky = ZONE.wall ? 0x8c9ad0 : night.sky, nGround = ZONE.wall ? 0x5c4c44 : night.ground, nI = ZONE.wall ? 0.95 : night.i;
+    mixColor(hemi.color, 0x64548a, 0xfff2de, e).lerp(_c1.set(nSky), 1 - inside);
+    mixColor(hemi.groundColor, 0x3c2832, 0xe9d9bd, e).lerp(_c1.set(nGround), 1 - inside);
+    hemi.intensity = lerp(nI, ZONE.wall ? lerp(0.22, 0.75, e) : lerp(0.2, 1.15, e), inside);
   });
   const stepLights = (t) => {
     const dt = LIGHT.lastT === null ? 0 : Math.min(0.5, Math.max(0, t - LIGHT.lastT)); LIGHT.lastT = t;
     if (LIGHT.k !== LIGHT.target) LIGHT.k = LIGHT.k < LIGHT.target ? Math.min(LIGHT.target, LIGHT.k + dt / 1.5) : Math.max(LIGHT.target, LIGHT.k - dt / 1.5);
     const e = LIGHT.k * LIGHT.k * (3 - 2 * LIGHT.k);
-    const c = LIGHT.cam, inside = Math.abs(c.x) < 15 ? THREE.MathUtils.smoothstep(-c.z, -0.5, 3.5) : 0;
+    const c = LIGHT.cam;
+    ZONE.wall = c.x < -69 ? 1 : 0;
+    const inside = Math.abs(c.x) < 15 ? THREE.MathUtils.smoothstep(-c.z, -0.5, 3.5) : inTheater(c.x, c.z) ? 1 : 0;
     for (const f of LIGHT.hooks) f(e, inside, t);
   };
   anim.push(stepLights);
@@ -226,21 +233,22 @@ function sky() {
 function buildStreet(scene, anim) {
   // 地面與道路
   // 各塊只佔自己的範圍、互不重疊；路緣石比人行道高 4cm、比路面寬出一點，避免共面閃爍
-  box(-160, -0.2, 7.9, 160, 0, 22.1, 'asphalt');
-  box(-160, -0.3, -1.6, 160, 0.15, 7.8, 'pavers');
-  box(-160, -0.3, 22.2, 160, 0.15, 30.4, 'pavers');
-  box(-160, -0.3, 7.8, 160, 0.19, 8.0, 'curb');
-  box(-160, -0.3, 22, 160, 0.19, 22.2, 'curb');
-  floors.push({ x0: -160, x1: 160, z0: 0, z1: 8, y: 0.15 });
-  floors.push({ x0: -160, x1: 160, z0: 22, z1: 30, y: 0.15 });
-  // 邊界
-  solidOnly(-160, -1, 29.5, 160, 50, 30.5); solidOnly(-61, -1, -2, -59, 50, 32); solidOnly(59, -1, -2, 61, 50, 32);
+  // 街道西端止於城牆（x = -66），城牆另一側是城牆區（district.js）
+  box(-66, -0.2, 7.9, 160, 0, 22.1, 'asphalt');
+  box(-66, -0.3, -1.6, 160, 0.15, 7.8, 'pavers');
+  box(-66, -0.3, 22.2, 160, 0.15, 30.4, 'pavers');
+  box(-66, -0.3, 7.8, 160, 0.19, 8.0, 'curb');
+  box(-66, -0.3, 22, 160, 0.19, 22.2, 'curb');
+  floors.push({ x0: -66, x1: 160, z0: 0, z1: 8, y: 0.15 });
+  floors.push({ x0: -66, x1: 160, z0: 22, z1: 30, y: 0.15 });
+  // 邊界（西邊是城牆，由 district.js 負責碰撞）
+  solidOnly(-66, -1, 29.5, 160, 50, 30.5); solidOnly(59, -1, -2, 61, 50, 32);
   // 道路標線
   // 標線厚 3cm（埋入路面 1cm），遠看不會與路面搶深度；斑馬線範圍內不畫中線與邊線
   const PY0 = -0.01, PY1 = 0.03;
   const inCross = (x0, x1) => (x1 > -46.6 && x0 < -38.5) || (x1 > 44.4 && x0 < 52.5);
-  for (let x = -150; x < 150; x += 6) if (!inCross(x, x + 3)) box(x, PY0, 14.92, x + 3, PY1, 15.08, 'paint');
-  for (const [x0, x1] of [[-160, -46.6], [-38.5, 44.4], [52.5, 160]]) box(x0, PY0, 9.9, x1, PY1, 10.02, 'paint');
+  for (let x = -66; x < 150; x += 6) if (!inCross(x, x + 3)) box(x, PY0, 14.92, x + 3, PY1, 15.08, 'paint');
+  for (const [x0, x1] of [[-66, -46.6], [-38.5, 44.4], [52.5, 160]]) box(x0, PY0, 9.9, x1, PY1, 10.02, 'paint');
   for (let i = 0; i < 8; i++) { box(-46 + i * 0.9, PY0, 8.3, -45.4 + i * 0.9, PY1, 21.7, 'paint'); box(45 + i * 0.9, PY0, 8.3, 45.6 + i * 0.9, PY1, 21.7, 'paint'); }
 
   // 街燈
@@ -257,6 +265,7 @@ function buildStreet(scene, anim) {
   }
   const sl1 = new THREE.PointLight(0xffc98a, 60, 26, 2); sl1.position.set(-18, 6, 6.2); scene.add(sl1);
   const sl2 = new THREE.PointLight(0xffc98a, 60, 26, 2); sl2.position.set(18, 6, 6.2); scene.add(sl2);
+  POOL.push(sl1, sl2);
 
   // 停在路邊的車（附圖裡有的）
   car(-31, 9.3, 'carWhite', 1); car(-22, 9.3, 'carGray', 1); car(28, 9.3, 'carBlack', 1); car(37, 9.4, 'carWhite', 1);
@@ -277,7 +286,7 @@ function buildStreet(scene, anim) {
     b.position.set(Math.cos(a) * r, h / 2, Math.sin(a) * r - 20); b.lookAt(0, h / 2, -20);
     sky.add(b);
   }
-  scene.add(sky);
+  scene.add(sky); SKYLINE = sky;
 
   // 消防栓、垃圾桶、圍欄
   cyl(0.18, 0.2, 0.7, -9, 0.15, 7.2, 'carMaroon', 10);
@@ -580,7 +589,7 @@ function buildFacade(scene, anim, q) {
     walls.push({ x0: x - 0.25, x1: x + 0.25, z0: 6.4, z1: 6.9, y0: 0, y1: 1.5 });
   }
   // 入口內透出的光
-  const doorL = new THREE.PointLight(0xc58bff, 30, 12, 2); doorL.position.set(0, 3, 1); scene.add(doorL);
+  const doorL = new THREE.PointLight(0xc58bff, 30, 12, 2); doorL.position.set(0, 3, 1); scene.add(doorL); POOL.push(doorL);
 }
 
 // ---------- 室內大廳 ----------
@@ -604,7 +613,7 @@ function buildInterior(scene, anim, q, renderer) {
     cyl(0.1, 0.36, 0.09, 0, 4.22, VZ, 'bronze', 20); cyl(0.37, 0.37, 0.025, 0, 4.2, VZ, 'gold', 20);
     cyl(0.3, 0.26, 0.03, 0, 4.172, VZ, 'lampGlow', 20);
     const pg = glow(scene, 0, 4.1, VZ, 2.6, 0xffd9a0, 0.5);
-    const pl = new THREE.PointLight(0xffdcb0, 30, 11, 2); pl.position.set(0, 3.9, VZ); scene.add(pl); // 吊燈：門廳的暖光
+    const pl = new THREE.PointLight(0xffdcb0, 30, 11, 2); pl.position.set(0, 3.9, VZ); scene.add(pl); POOL.push(pl); // 吊燈：門廳的暖光
     onLights((e) => { pg.material.opacity = lerp(0.4, 0.6, e); sun.material.emissiveIntensity = lerp(0.12, 0.3, e); pl.intensity = lerp(16, 34, e); });
   }
 
@@ -869,7 +878,7 @@ function buildInterior(scene, anim, q, renderer) {
   B.add(new THREE.TubeGeometry(new (class extends THREE.Curve { getPoint(t, o = new THREE.Vector3()) { const [x, y] = vaultPt(Math.PI * t, 0.62); return o.set(x, y + 0.08, -57.96); } })(), 64, 0.11, 6, false), 'gold');
   // 螢幕光（面光源，照亮整個大廳）
   const ral = new THREE.RectAreaLight(0x9fb6ff, 3.2, SCREEN.w, SCREEN.h);
-  ral.position.set(0, SCREEN.y, -57.6); ral.lookAt(0, SCREEN.y, 0); scene.add(ral);
+  ral.position.set(0, SCREEN.y, -57.6); ral.lookAt(0, SCREEN.y, 0); scene.add(ral); HALL_RAL = ral;
 
   // 牆面與地面的沉浸式投影（動態）：關燈時才投影，開燈時淡出、露出後面的石牆與地板
   const proj = projectionMaterial();
@@ -938,7 +947,7 @@ function buildInterior(scene, anim, q, renderer) {
   //   開燈：均勻明亮的暖白場燈，石材呈象牙白
   //   關燈：場燈全暗，只剩桌上燭光的暖色、燈架上的冷藍點光，大螢幕與牆面投影是最亮的東西
   const lamps = [];
-  const L = (x, y, z, d, off, on) => { const l = new THREE.PointLight(off[0], off[1], d, 2); l.position.set(x, y, z); scene.add(l); lamps.push({ l, off, on }); return l; };
+  const L = (x, y, z, d, off, on) => { const l = new THREE.PointLight(off[0], off[1], d, 2); l.position.set(x, y, z); scene.add(l); lamps.push({ l, off, on }); POOL.push(l); return l; };
   L(0, 9, -17, 34, [0xffb070, 55], [0xfff0d6, 130]);
   L(0, 10, -34, 34, [0x8f84ff, 55], [0xfff0d6, 150]);
   L(0, 9, -50, 34, [0x7f8cff, 45], [0xfff0d6, 120]);
@@ -1279,3 +1288,44 @@ function rugMaterial() {
 }
 
 export function setScene(s) { scene_ = s; }
+
+// ---------- 城牆區：借用殿堂的光源 ----------
+// 兩區不會同時看到（中間隔著城牆），所以人在城牆區時，把殿堂的點光源移到觀影館與廣場使用：
+// 光源數量不變，shader 不必重新編譯，也不會多出逐像素的燈光成本
+let SKYLINE = null, HALL_RAL = null;
+const POOL = []; // 可借用的點光源
+export const ZONE = { wall: 0 };
+function zoneLights(district) {
+  const home = POOL.map((l) => ({ p: l.position.clone(), d: l.distance }));
+  const ralHome = HALL_RAL ? { p: HALL_RAL.position.clone(), q: HALL_RAL.quaternion.clone(), w: HALL_RAL.width, h: HALL_RAL.height, c: HALL_RAL.color.getHex() } : null;
+  const alt = district.lights.slice(0, POOL.length);
+  let was = -1;
+  onLights((e, _in, t) => {
+    const z = ZONE.wall;
+    if (SKYLINE) SKYLINE.visible = !z;
+    if (!z) {
+      if (was !== 0) {
+        POOL.forEach((l, i) => { l.position.copy(home[i].p); l.distance = home[i].d; });
+        if (ralHome) { HALL_RAL.position.copy(ralHome.p); HALL_RAL.quaternion.copy(ralHome.q); HALL_RAL.width = ralHome.w; HALL_RAL.height = ralHome.h; HALL_RAL.color.setHex(ralHome.c); }
+      }
+      was = 0; return; // 殿堂內的燈由原本的 hook 設定顏色與強度
+    }
+    if (was !== 1) {
+      POOL.forEach((l, i) => { const a = alt[i]; if (a) { l.position.set(a.x, a.y, a.z); l.distance = a.d; } });
+      if (HALL_RAL) { const r = district.ral; HALL_RAL.position.set(r.x, r.y, r.z); HALL_RAL.lookAt(r.x + 10, r.y, r.z); HALL_RAL.width = r.w; HALL_RAL.height = r.h; HALL_RAL.color.setHex(0xbfc8ff); }
+      was = 1;
+    }
+    POOL.forEach((l, i) => {
+      const a = alt[i]; if (!a) { l.intensity = 0; return; }
+      const fl = a.flick ? 1 + a.flick * (Math.sin(t * 13 + i * 2.1) * 0.08 + Math.sin(t * 29 + i) * 0.05) : 1;
+      mixColor(l.color, a.off[0], a.on[0], e); l.intensity = lerp(a.off[1], a.on[1], e) * fl;
+    });
+    if (HALL_RAL) HALL_RAL.intensity = lerp(3.0, 1.6, e);
+  });
+}
+// 給 district.js 使用的建模工具
+export const W = {
+  box, cyl, place, solidOnly, glow, onLights, decal,
+  add: (g, k) => B.add(g, k), addMats: (o) => Object.assign(MATS, o),
+  get mats() { return MATS; }, walls, floors, seats, camBlock, zone: ZONE,
+};

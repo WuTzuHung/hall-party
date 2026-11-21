@@ -48,6 +48,21 @@ button:active{filter:brightness(.9)}button:disabled{opacity:.55;cursor:wait}
   .now img,.history-item img{width:100%;max-width:100%}.grid{grid-template-columns:1fr}
   .card{padding:16px}h1{font-size:19px;letter-spacing:.08em}
 }
+
+/* 城牆觀影館 */
+#theater-card{border-color:rgba(150,180,140,.4);background:linear-gradient(180deg,#18201a,#141a16)}
+#theater-card h2 small{font:400 12px "Noto Sans TC",sans-serif;color:var(--muted);margin-left:8px;letter-spacing:0}
+.th-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:760px){.th-grid{grid-template-columns:1fr}}
+.th-scr{border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:12px;background:rgba(0,0,0,.18)}
+.th-scr h3{margin:0 0 8px;font:700 15px "Cinzel",serif;letter-spacing:.12em;color:#cfe0c4}
+.th-now{display:flex;gap:10px;align-items:center;min-height:54px;margin-bottom:8px}
+.th-now img{width:86px;height:48px;border-radius:6px;object-fit:cover;background:#000;flex:none}
+.th-now .t{font-weight:700;font-size:14px;word-break:break-all}.th-now .i{font-size:12px;color:var(--muted)}
+.th-btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.th-btns button{padding:8px 10px;font-size:13px}
+.th-gain{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;color:var(--muted)}.th-gain input{flex:1}
+.th-both{margin-top:14px;padding-top:12px;border-top:1px dashed rgba(255,255,255,.12)}
+#th-msg{margin-top:8px;font-size:13px;min-height:18px}
 </style>
 <style>
 /* 大廳音樂／開賽倒數 */
@@ -197,6 +212,51 @@ input.dt{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(2
     <div id="lt-msg" class="muted" role="status" aria-live="polite" style="margin-top:6px"></div>
   </div>
   <!-- ===== /室內燈光 ===== -->
+  <!-- ===== 城牆觀影館（同時視聽，兩台螢幕） ===== -->
+  <div class="card" id="theater-card">
+    <h2>城牆觀影館 · 同時視聽<small>兩台螢幕各自同步播放</small></h2>
+    <div class="muted" style="margin-bottom:10px">從殿堂門口沿街往西走、穿過城門就是觀影館。I（左）通常放作品畫面、II（右）放實況主；兩台都會出聲，可以各自調音量比例。</div>
+    <div class="th-grid">
+      <div class="th-scr" data-k="a">
+        <h3>螢幕 I（左）</h3>
+        <div class="th-now"><img alt=""><div><div class="t">尚未設定</div><div class="i"></div></div></div>
+        <input type="text" class="th-url" placeholder="YouTube 網址（影片或直播）">
+        <label class="check" style="min-height:32px"><input type="checkbox" class="th-live"> 這是直播</label>
+        <div class="th-btns">
+          <button class="primary" data-act="set">播放到 I</button>
+          <button data-act="play">▶</button><button data-act="pause">⏸</button>
+          <button data-skip="-5">−5 秒</button><button data-skip="-1">−1 秒</button><button data-skip="1">+1 秒</button><button data-skip="5">+5 秒</button>
+          <button data-act="restart">⟲ 從頭</button><button data-act="clear">清除</button>
+        </div>
+        <div class="th-gain">音量 <input type="range" min="0" max="100" step="5" class="th-g"><span class="th-gv">100</span></div>
+      </div>
+      <div class="th-scr" data-k="b">
+        <h3>螢幕 II（右）</h3>
+        <div class="th-now"><img alt=""><div><div class="t">尚未設定</div><div class="i"></div></div></div>
+        <input type="text" class="th-url" placeholder="YouTube 網址（影片或直播）">
+        <label class="check" style="min-height:32px"><input type="checkbox" class="th-live"> 這是直播</label>
+        <div class="th-btns">
+          <button class="primary" data-act="set">播放到 II</button>
+          <button data-act="play">▶</button><button data-act="pause">⏸</button>
+          <button data-skip="-5">−5 秒</button><button data-skip="-1">−1 秒</button><button data-skip="1">+1 秒</button><button data-skip="5">+5 秒</button>
+          <button data-act="restart">⟲ 從頭</button><button data-act="clear">清除</button>
+        </div>
+        <div class="th-gain">音量 <input type="range" min="0" max="100" step="5" class="th-g"><span class="th-gv">100</span></div>
+      </div>
+    </div>
+    <div class="th-both">
+      <div class="muted" style="margin-bottom:6px">兩台一起（同一個時間點，進度才會對齊）：</div>
+      <div class="th-btns">
+        <button class="primary" id="th-setboth">兩台同時開始（用上面兩個網址）</button>
+        <button data-both="play">▶ 同時播放</button><button data-both="pause">⏸ 同時暫停</button><button data-both="restart">⟲ 同時從頭</button>
+        <button data-bskip="-10">兩台 −10 秒</button><button data-bskip="10">兩台 +10 秒</button>
+      </div>
+      <div class="muted" style="margin-top:8px">對不齊時：用單台的 ±1／±5 秒微調，直到兩邊畫面一致。</div>
+    </div>
+    <div id="th-msg" role="status" aria-live="polite"></div>
+  </div>
+  <!-- ===== /城牆觀影館 ===== -->
+
   <!-- ===== 大廳音樂與開賽倒數（獨立區塊） ===== -->
   <div class="card" id="music-card">
     <h2>大廳音樂 <span id="mu-mode" class="chip"></span></h2>
@@ -269,6 +329,7 @@ function render(st) {
   if (st.maxUsers) { $('#s-max').textContent = st.maxUsers; if (document.activeElement !== $('#max')) $('#max').value = st.maxUsers; }
   if (st.online !== undefined) { $('#s-online').textContent = st.online; $('#s-queue').textContent = st.queue; }
   if (typeof st.lights === 'boolean' && window.renderLights) window.renderLights(st.lights);
+  if (st.theater && window.renderTheater) window.renderTheater(st.theater);
 }
 async function refresh() { const epoch = authEpoch; try { const st = await api('state'); if (epoch === authEpoch) render(st); } catch (e) { } }
 async function login() {
@@ -538,6 +599,44 @@ if (pw) login();
     try { render(await api('lights', { on: want })); say(want ? '室內燈已開' : '室內燈已關'); }
     catch (e) { say('失敗：' + e.message, false); }
     finally { btn.disabled = false; }
+  };
+})();
+</script>
+<script>
+// 城牆觀影館：兩台螢幕各自設定與控制
+(() => {
+  const $c = document.querySelector('#theater-card'); if (!$c) return;
+  const say = (t, ok = true) => { const m = document.querySelector('#th-msg'); m.textContent = t; m.className = ok ? 'ok' : 'bad'; };
+  const box = (k) => $c.querySelector(`.th-scr[data-k="${k}"]`);
+  const send = async (body, ok) => { try { const st = await api('theater', body); render(st); if (ok) say(ok); } catch (e) { say('失敗：' + e.message, false); } };
+  for (const k of ['a', 'b']) {
+    const b = box(k), N = k === 'a' ? 'I' : 'II';
+    b.querySelector('.th-url').addEventListener('input', (e) => { if (/\/live\//.test(e.target.value)) b.querySelector('.th-live').checked = true; });
+    b.querySelectorAll('[data-act]').forEach((btn) => btn.onclick = () => {
+      const act = btn.dataset.act;
+      if (act === 'set') return send({ screen: k, action: 'set', url: b.querySelector('.th-url').value.trim(), live: b.querySelector('.th-live').checked }, `螢幕 ${N} 已更換`);
+      send({ screen: k, action: act }, { play: `螢幕 ${N} 播放`, pause: `螢幕 ${N} 暫停`, restart: `螢幕 ${N} 從頭`, clear: `螢幕 ${N} 已清除` }[act]);
+    });
+    b.querySelectorAll('[data-skip]').forEach((btn) => btn.onclick = () => send({ screen: k, action: 'skip', seconds: Number(btn.dataset.skip) }, `螢幕 ${N} ${btn.textContent}`));
+    const g = b.querySelector('.th-g'); let gT;
+    g.oninput = () => { b.querySelector('.th-gv').textContent = g.value; clearTimeout(gT); gT = setTimeout(() => send({ screen: k, action: 'gain', gain: Number(g.value) }, `螢幕 ${N} 音量 ${g.value}`), 250); };
+  }
+  document.querySelector('#th-setboth').onclick = () => {
+    const ua = box('a').querySelector('.th-url').value.trim(), ub = box('b').querySelector('.th-url').value.trim();
+    if (!ua && !ub) return say('請先在上面填入至少一個網址', false);
+    send({ screen: 'both', action: 'set', urlA: ua, urlB: ub, liveA: box('a').querySelector('.th-live').checked, liveB: box('b').querySelector('.th-live').checked }, '兩台已同時開始');
+  };
+  $c.querySelectorAll('[data-both]').forEach((btn) => btn.onclick = () => send({ screen: 'both', action: btn.dataset.both }, btn.textContent.trim()));
+  $c.querySelectorAll('[data-bskip]').forEach((btn) => btn.onclick = () => send({ screen: 'both', action: 'skip', seconds: Number(btn.dataset.bskip) }, btn.textContent.trim()));
+  window.renderTheater = (th) => {
+    for (const k of ['a', 'b']) {
+      const c = th[k], b = box(k), img = b.querySelector('img');
+      if (c) { if (!img.src.includes(c.id)) img.src = `https://i.ytimg.com/vi/${c.id}/mqdefault.jpg`; img.style.visibility = ''; }
+      else { img.removeAttribute('src'); img.style.visibility = 'hidden'; }
+      b.querySelector('.t').textContent = c ? (c.title || c.id) : '尚未設定';
+      b.querySelector('.i').textContent = !c ? '待機畫面' : c.live ? '直播中' : `${c.playing ? '播放中' : '已暫停'} · ${fmt(c.position)}${c.dur ? ' / ' + fmt(c.dur) : ''}`;
+      const g = b.querySelector('.th-g'); if (document.activeElement !== g) { g.value = c ? c.gain : 100; b.querySelector('.th-gv').textContent = g.value; }
+    }
   };
 })();
 </script>

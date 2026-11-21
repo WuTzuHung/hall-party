@@ -25,12 +25,37 @@ function fmtCountdown(ms) {
   return (d ? d + 'D ' : '') + (d || h ? p(h) + ':' : '') + p(m) + ':' + p(x);
 }
 
-export class BigScreen {
-  constructor(scene, container) {
+// 所有螢幕共用一個 CSS3D 圖層（一個 DOM 層、每幀只渲染一次）
+export class ScreenLayer {
+  constructor(container) {
     this.cssRenderer = new CSS3DRenderer();
     this.cssRenderer.domElement.id = 'css3d';
     container.prepend(this.cssRenderer.domElement);
     this.cssScene = new THREE.Scene();
+  }
+  render(camera) { this.cssRenderer.render(this.cssScene, camera); }
+  setSize(w, h) { this.cssRenderer.setSize(w, h); }
+}
+// YouTube IFrame API 只載入一次，所有螢幕共用
+let ytPromise = null;
+function ytReady() {
+  if (ytPromise) return ytPromise;
+  ytPromise = new Promise((res) => {
+    if (window.YT?.Player) return res();
+    const prev = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => { try { prev && prev(); } catch (_) { } res(); };
+    const s = document.createElement('script'); s.src = 'https://www.youtube.com/iframe_api'; document.head.appendChild(s);
+  });
+  return ytPromise;
+}
+
+export class BigScreen {
+  // cfg：{ x, y, z, w, h, ry（面向；0 = 朝 +z）, elId, idleHTML }；不給就是殿堂大螢幕
+  constructor(scene, layer, cfg = {}) {
+    if (!(layer instanceof ScreenLayer)) layer = new ScreenLayer(layer); // 兼容舊用法：第二個參數是容器
+    this.layer = layer; this.cssScene = layer.cssScene; this.cssRenderer = layer.cssRenderer;
+    const S = this.cfg = { x: SCREEN.x, y: SCREEN.y, z: SCREEN.z, w: SCREEN.w, h: SCREEN.h, ry: 0, elId: 'yt-player', idleHTML: null, ...cfg };
+    this.active = true;
 
     const el = document.createElement('div');
     el.style.cssText = `width:${PX_W}px;height:${PX_H}px;background:#000;overflow:hidden;position:relative`;
@@ -51,10 +76,10 @@ export class BigScreen {
     // 待機畫面（沒有任何內容時）
     const idle = document.createElement('div'); idle.className = 'hs-layer';
     idle.style.cssText += ';display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 40%,#3a1f66,#0b0718 70%);color:#f3e6c4;font-family:Cinzel,serif;text-align:center';
-    idle.innerHTML = RULE(420, 'margin-bottom:34px') + '<div style="font-size:84px;font-weight:600;letter-spacing:28px;padding-left:28px;color:#ecd9a8;text-shadow:0 2px 0 rgba(0,0,0,.35)">GENG<span style="font-size:34px;letter-spacing:10px;margin:0 34px;vertical-align:middle;color:#b8913f">VS</span>BLG</div>' + RULE(420, 'margin-top:34px');
+    idle.innerHTML = S.idleHTML || RULE(420, 'margin-bottom:34px') + '<div style="font-size:84px;font-weight:600;letter-spacing:28px;padding-left:28px;color:#ecd9a8;text-shadow:0 2px 0 rgba(0,0,0,.35)">GENG<span style="font-size:34px;letter-spacing:10px;margin:0 34px;vertical-align:middle;color:#b8913f">VS</span>BLG</div>' + RULE(420, 'margin-top:34px');
     el.appendChild(idle);
     const holder = document.createElement('div'); holder.className = 'hs-layer'; holder.style.opacity = '0';
-    const ph = document.createElement('div'); ph.id = 'yt-player'; ph.style.cssText = 'position:absolute;inset:0';
+    const ph = document.createElement('div'); ph.id = S.elId; ph.style.cssText = 'position:absolute;inset:0';
     holder.appendChild(ph); el.appendChild(holder);
     // 正在播放卡片（蓋在播放器上方）
     const card = document.createElement('div'); card.className = 'hs-layer hs-card'; card.style.opacity = '0'; card.style.pointerEvents = 'none';
@@ -71,14 +96,15 @@ export class BigScreen {
     el.appendChild(banner);
     this.el = { idle, holder, card, banner, title: card.querySelector('.hs-title'), sub: card.querySelector('.hs-sub'), cd: card.querySelector('.hs-cd'), cdT: card.querySelector('.hs-cd-t'), bannerT: banner.querySelector('b') };
 
-    const obj = new CSS3DObject(el);
-    obj.position.set(SCREEN.x, SCREEN.y, SCREEN.z + 0.01);
-    obj.scale.setScalar(SCREEN.w / PX_W);
+    const obj = this.obj = new CSS3DObject(el);
+    const nx = Math.sin(S.ry) * 0.01, nz = Math.cos(S.ry) * 0.01;
+    obj.position.set(S.x + nx, S.y, S.z + nz); obj.rotation.y = S.ry;
+    obj.scale.setScalar(S.w / PX_W);
     this.cssScene.add(obj);
 
     // WebGL 中的「透明洞」，讓下層的 iframe 透出來，同時保留正確的前後遮擋
-    const hole = new THREE.Mesh(new THREE.PlaneGeometry(SCREEN.w, SCREEN.h), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0, blending: THREE.NoBlending, side: THREE.FrontSide }));
-    hole.position.set(SCREEN.x, SCREEN.y, SCREEN.z + 0.01);
+    const hole = this.hole = new THREE.Mesh(new THREE.PlaneGeometry(S.w, S.h), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0, blending: THREE.NoBlending, side: THREE.FrontSide }));
+    hole.position.copy(obj.position); hole.rotation.y = S.ry;
     scene.add(hole);
 
     this.player = null; this.ready = false; this.state = null; this.media = null; this.offset = 0;
@@ -89,15 +115,13 @@ export class BigScreen {
     setInterval(() => this.updateCountdown(), 1000);
     this.loadAPI();
   }
-  loadAPI() {
-    window.onYouTubeIframeAPIReady = () => this.createPlayer();
-    const s = document.createElement('script'); s.src = 'https://www.youtube.com/iframe_api'; document.head.appendChild(s);
-  }
+  loadAPI() { ytReady().then(() => this.createPlayer()); }
   createPlayer() {
     const v = this.state;
     // API 可能比入場的媒體同步先到；明確傳入 undefined 會讓 YT.Player 直接拋例外。
-    if (this.player || !v || !window.YT?.Player) return;
-    this.player = new YT.Player('yt-player', {
+    // 不在這一區（例如人在城牆區時的殿堂大螢幕）就先不建立播放器，省流量與效能
+    if (this.player || !v || !this.active || !window.YT?.Player) return;
+    this.player = new YT.Player(this.cfg.elId, {
       width: PX_W, height: PX_H,
       videoId: v.id,
       playerVars: { autoplay: 1, mute: 1, controls: 0, disablekb: 1, modestbranding: 1, rel: 0, playsinline: 1, iv_load_policy: 3, fs: 0, origin: location.origin },
@@ -107,6 +131,7 @@ export class BigScreen {
           // 入場可能早於 iframe 就緒；先靜音播放，之後由聲音按鈕的手勢解鎖。
           this.disableCaptions();
           this.player.mute(); this.applyVolume(); this.apply(true); this.updateSound();
+          if (!this.active) { try { this.player.pauseVideo(); } catch (_) { } }
         },
         onApiChange: () => this.disableCaptions(),
         onStateChange: (e) => this.onPlayerState(e.data),
@@ -122,7 +147,7 @@ export class BigScreen {
   }
   report(m) { try { this.onReport && this.onReport(m); } catch (_) { } }
   isSoundOn() {
-    try { return this.ready && !this.muted && !this.player.isMuted() && (this.player.getPlayerState() === 1 || this.state?.playing === false); } catch (_) { return false; }
+    try { return this.active && this.ready && !this.muted && !this.player.isMuted() && (this.player.getPlayerState() === 1 || this.state?.playing === false); } catch (_) { return false; }
   }
   updateSound() { this.onSoundChange && this.onSoundChange(this.isSoundOn()); }
   onPlayerState(s) {
@@ -155,11 +180,37 @@ export class BigScreen {
     if (!this.ready) return;
     if (changed) this.transition(); else this.apply(false);
   }
+  // 觀影館的單一頻道：{ id, live, playing, position, seq, title, gain } 或 null
+  setChannel(c) {
+    this.media = null;
+    const want = c ? { kind: 'theater', id: c.id, live: !!c.live, playing: c.playing, position: c.position, seq: c.seq, title: c.title } : null;
+    this.gain = c ? (c.gain ?? 100) : 100;
+    const prev = this.state;
+    const changed = !prev !== !want || (prev && want && (prev.seq !== want.seq || prev.id !== want.id));
+    this.state = want ? { ...want, receivedAt: performance.now() } : null;
+    this.updateOverlay();
+    if (!this.player) this.createPlayer();
+    if (!this.ready || !this.active) { if (this.ready) this.applyVolume(); return; }
+    if (changed) this.transition(); else { this.applyVolume(); this.apply(false); }
+  }
+  // 這一區有沒有人在看：不在時暫停並隱藏 iframe；回來時從伺服器進度接著播
+  setActive(on) {
+    on = !!on; if (on === this.active) return;
+    this.active = on;
+    this.obj.visible = on; this.hole.visible = on;
+    if (!on) { try { if (this.ready) { this.player.mute(); this.player.pauseVideo(); } } catch (_) { } this.updateSound(); return; }
+    if (!this.player) { this.createPlayer(); return; }
+    if (this.ready) {
+      this.applyVolume();
+      if (!this.muted) { try { this.player.unMute(); } catch (_) { } }
+      this.apply(true); this.updateSound();
+    }
+  }
   // 兼容舊格式（只有比賽影片）
   setState(v) { this.setMedia({ mode: 'match', video: v, music: null, countdown: null }); }
   updateOverlay() {
     const m = this.media, v = this.state, E = this.el;
-    const showCard = !!(v && v.kind === 'music' && m.music.display === 'card');
+    const showCard = !!(v && v.kind === 'music' && m && m.music.display === 'card');
     E.holder.style.opacity = v && !showCard ? '1' : '0';
     E.card.style.opacity = showCard ? '1' : '0';
     E.idle.style.opacity = v ? '0' : '1';
@@ -173,7 +224,7 @@ export class BigScreen {
   }
   serverNow() { return Date.now() + this.offset; }
   updateCountdown() {
-    const m = this.media, E = this.el; if (!m) return;
+    const m = this.media, E = this.el; if (!m) { E.cd.style.display = 'none'; E.banner.style.opacity = '0'; return; }
     const cd = m.mode === 'music' && m.countdown ? m.countdown : null;
     const left = cd ? cd.at - this.serverNow() : 0;
     const txt = cd ? (left > 0 ? fmtCountdown(left) : 'NOW') : '';
@@ -205,12 +256,12 @@ export class BigScreen {
   // 實際音量 = 區域音量 × 淡入淡出；靜音開關獨立
   applyVolume() {
     if (!this.ready) return;
-    const v = Math.round(this.volume * this.fade);
+    const v = Math.round(this.volume * this.fade * (this.gain ?? 100) / 100);
     // 淡入與分區音量更新不可在手勢之外解除靜音。
     try { this.player.setVolume(v); if (this.muted) this.player.mute(); } catch (_) { }
   }
   apply(force) {
-    const v = this.state; if (!this.ready) return;
+    const v = this.state; if (!this.ready || !this.active) return;
     const p = this.player;
     if (!v) { try { if (p.getPlayerState() === 1) p.pauseVideo(); } catch (_) { } return; }
     let cur = '';
@@ -227,10 +278,10 @@ export class BigScreen {
     if (v.playing && p.getPlayerState() !== 1) p.playVideo();
     if (!v.playing && p.getPlayerState() === 1) p.pauseVideo();
   }
-  tick() { if (this.ready) { this.disableCaptions(); this.apply(false); this.updateSound(); } }
+  tick() { if (this.ready && this.active) { this.disableCaptions(); this.apply(false); this.updateSound(); } }
   setSound(on) {
     this.muted = !on; this.applyVolume();
-    if (on && this.ready) {
+    if (on && this.ready && this.active) {
       // 直接在 click／keydown 手勢內呼叫，不能延到同步 tick 或淡入計時器。
       this.player.unMute();
       if (this.state?.playing) this.player.playVideo();
@@ -240,6 +291,6 @@ export class BigScreen {
     setTimeout(() => this.updateSound(), 250);
   }
   setVolume(v) { v = Math.round(v); if (v === this.volume) return; this.volume = v; if (!this.fadeTimer) this.applyVolume(); }
-  render(camera) { this.cssRenderer.render(this.cssScene, camera); }
-  setSize(w, h) { this.cssRenderer.setSize(w, h); }
+  render(camera) { this.layer.render(camera); }
+  setSize(w, h) { this.layer.setSize(w, h); }
 }
