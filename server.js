@@ -139,11 +139,18 @@ function currentMedia() {
   const t = curTrack(); if (!t) return null;
   return { kind: 'music', item: t, clock: state.music, live: !!t.live, seq: state.music.seq, id: t.id };
 }
-function publicTheaterCh(c) {
-  if (!c) return null;
-  return { id: c.id, live: !!c.live, title: c.title || '', playing: !!c.playing, position: c.live ? 0 : clockPos(c), seq: c.seq, gain: c.gain ?? 100, dur: c.dur || 0 };
+function theaterPos(c, now) { return c.playing ? (now - c.startedAt) / 1000 : c.pausedAt; }
+function theaterSet(c, seconds, now) {
+  const pos = Math.max(0, Math.min(c.dur || Infinity, seconds));
+  c.startedAt = now - pos * 1000; c.pausedAt = pos;
+  // 既有播放器對同一 seq 容忍 2 秒誤差；換 seq 才會確實套用 ±0.5 秒等小幅跳轉。
+  c.seq = ++state.seq;
 }
-function publicTheater() { return { a: publicTheaterCh(state.theater.a), b: publicTheaterCh(state.theater.b) }; }
+function publicTheaterCh(c, now) {
+  if (!c) return null;
+  return { id: c.id, live: !!c.live, title: c.title || '', playing: !!c.playing, position: c.live ? 0 : theaterPos(c, now), seq: c.seq, gain: c.gain ?? 100, dur: c.dur || 0 };
+}
+function publicTheater() { const now = Date.now(); return { a: publicTheaterCh(state.theater.a, now), b: publicTheaterCh(state.theater.b, now) }; }
 function publicMedia() {
   const m = state.music, t = curTrack(), cd = state.countdown;
   return {
@@ -365,45 +372,66 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === '/api/admin/theater') {
       // 觀影館兩台螢幕：screen 'a' | 'b' | 'both'
-      // action：set（設定網址並開始播放；both 時用 urlA／urlB 同時開始）、play、pause、restart、seek、skip、clear、gain
+      // set 可帶 offset，在同一時間點換片並以 I 對齊 II；align 只調整 II，保留播放／暫停狀態
       const keys = body.screen === 'both' ? ['a', 'b'] : body.screen === 'a' || body.screen === 'b' ? [body.screen] : null;
       if (!keys) return json(res, 400, { error: 'screen 必須是 a、b 或 both' });
       const T = state.theater, now = Date.now();
-      if (body.action === 'set') {
+      const finite = (v) => (typeof v === 'number' || (typeof v === 'string' && v.trim() !== '')) && Number.isFinite(Number(v)) && Math.abs(Number(v)) <= Number.MAX_SAFE_INTEGER / 1000;
+      const hasOffset = body.action === 'align' || (body.action === 'set' && body.offset !== undefined);
+      if (hasOffset && !finite(body.offset)) return json(res, 400, { error: '偏移需為有效秒數，可為負數或小數' });
+      const offset = Number(body.offset);
+      const liveNotice = '直播沒有可對齊的進度，已略過對齊';
+      let notice = '';
+      if (body.action === 'align') {
+        if (body.screen === 'a') return json(res, 400, { error: '對齊只會以 I 為準調整 II，screen 請用 b 或 both' });
+        if (!T.a || !T.b) return json(res, 400, { error: '請先設定 I 與 II 的影片' });
+        if (T.a.live || T.b.live) return json(res, 200, { ...adminState(), skipped: true, message: liveNotice });
+        theaterSet(T.b, theaterPos(T.a, now) + offset, now);
+      } else if (body.action === 'set') {
+        if (hasOffset && (body.screen !== 'both' || !body.urlA || !body.urlB)) return json(res, 400, { error: '套用偏移時請同時提供 I 與 II 的網址' });
         const items = [];
         for (const k of keys) {
           const url = keys.length > 1 ? body['url' + k.toUpperCase()] : body.url;
           if (keys.length > 1 && !url) continue; // 同時開始時可以只換其中一台
           const parsed = parseYouTube(url);
           if (!parsed) return json(res, 400, { error: `螢幕 ${k.toUpperCase()}：無法辨識的 YouTube 網址` });
-          items.push([k, parsed]);
+          const start = (keys.length > 1 ? body['start' + k.toUpperCase()] : body.start) ?? parsed.start;
+          if (!finite(start)) return json(res, 400, { error: '起始進度需為有效秒數' });
+          items.push([k, parsed, Math.max(0, Number(start))]);
         }
         if (!items.length) return json(res, 400, { error: '請提供網址' });
-        for (const [k, parsed] of items) {
+        for (const [k, parsed, start] of items) {
           const live = !!((keys.length > 1 ? body['live' + k.toUpperCase()] : body.live) ?? parsed.live);
-          const start = Number((keys.length > 1 ? body['start' + k.toUpperCase()] : body.start) ?? parsed.start) || 0;
           const title = cleanText(keys.length > 1 ? body['title' + k.toUpperCase()] : body.title, 120);
           const gain = T[k]?.gain ?? 100;
           T[k] = { id: parsed.id, live, title, playing: true, startedAt: now - start * 1000, pausedAt: start, dur: 0, seq: ++state.seq, gain };
         }
+        if (hasOffset) {
+          if (T.a.live || T.b.live) notice = liveNotice;
+          else theaterSet(T.b, theaterPos(T.a, now) + offset, now);
+        }
       } else {
+        if (!['play', 'pause', 'restart', 'seek', 'skip', 'clear', 'gain'].includes(body.action)) return json(res, 400, { error: 'unknown action' });
+        if (['seek', 'skip'].includes(body.action) && !finite(body.seconds)) return json(res, 400, { error: '進度需為有效秒數' });
+        if (body.action === 'gain' && (!finite(body.gain) || Number(body.gain) < 0 || Number(body.gain) > 100)) return json(res, 400, { error: '音量需為 0–100' });
         for (const k of keys) {
           const c = T[k];
           if (body.action === 'clear') { T[k] = null; continue; }
           if (!c) { if (keys.length > 1) continue; return json(res, 400, { error: `螢幕 ${k.toUpperCase()} 還沒有設定影片` }); }
-          const pos = clockPos(c);
+          const pos = theaterPos(c, now);
           switch (body.action) {
             // 同時開始／暫停時用同一個時間點，兩台的進度才會一致
             case 'play': if (!c.playing) { c.playing = true; c.startedAt = now - c.pausedAt * 1000; } break;
             case 'pause': if (c.playing) { c.playing = false; c.pausedAt = pos; } break;
-            case 'restart': clockSet(c, 0); break;
-            case 'seek': clockSet(c, Number(body.seconds) || 0); break;
-            case 'skip': clockSet(c, pos + (Number(body.seconds) || 0)); break;
-            case 'gain': { const g = Math.round(Number(body.gain)); if (!(g >= 0 && g <= 100)) return json(res, 400, { error: '音量需為 0–100' }); c.gain = g; break; }
-            default: return json(res, 400, { error: 'unknown action' });
+            case 'restart': theaterSet(c, 0, now); c.playing = true; break;
+            case 'seek': theaterSet(c, Number(body.seconds), now); break;
+            case 'skip': theaterSet(c, pos + Number(body.seconds), now); break;
+            case 'gain': c.gain = Math.round(Number(body.gain)); break;
           }
         }
       }
+      save(); broadcastMedia();
+      return json(res, 200, { ...adminState(), ...(notice ? { skipped: true, message: notice } : {}) });
     } else if (p === '/api/admin/video') {
       // 開始比賽：自動切到比賽模式，大廳音樂停止
       const parsed = parseYouTube(body.url);

@@ -62,6 +62,10 @@ button:active{filter:brightness(.9)}button:disabled{opacity:.55;cursor:wait}
 .th-btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.th-btns button{padding:8px 10px;font-size:13px}
 .th-gain{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;color:var(--muted)}.th-gain input{flex:1}
 .th-both{margin-top:14px;padding-top:12px;border-top:1px dashed rgba(255,255,255,.12)}
+.th-clock,#th-delta{font-variant-numeric:tabular-nums}
+.th-sync,.th-presets{margin-top:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,.1)}
+.th-presets select{width:100%;min-width:0;padding:12px;border:1px solid rgba(255,255,255,.15);border-radius:8px;background:#141a16;color:var(--ink);font:inherit}
+#th-offset{max-width:200px}#th-delta{margin:8px 0;font-size:14px}#theater-card button:disabled{opacity:.4;cursor:default}
 #th-msg{margin-top:8px;font-size:13px;min-height:18px}
 </style>
 <style>
@@ -225,7 +229,7 @@ input.dt{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(2
         <div class="th-btns">
           <button class="primary" data-act="set">播放到 I</button>
           <button data-act="play">▶</button><button data-act="pause">⏸</button>
-          <button data-skip="-5">−5 秒</button><button data-skip="-1">−1 秒</button><button data-skip="1">+1 秒</button><button data-skip="5">+5 秒</button>
+          <button data-skip="-5">−5 秒</button><button data-skip="-1">−1 秒</button><button data-skip="-0.5">−0.5 秒</button><button data-skip="0.5">+0.5 秒</button><button data-skip="1">+1 秒</button><button data-skip="5">+5 秒</button>
           <button data-act="restart">⟲ 從頭</button><button data-act="clear">清除</button>
         </div>
         <div class="th-gain">音量 <input type="range" min="0" max="100" step="5" class="th-g"><span class="th-gv">100</span></div>
@@ -238,7 +242,7 @@ input.dt{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(2
         <div class="th-btns">
           <button class="primary" data-act="set">播放到 II</button>
           <button data-act="play">▶</button><button data-act="pause">⏸</button>
-          <button data-skip="-5">−5 秒</button><button data-skip="-1">−1 秒</button><button data-skip="1">+1 秒</button><button data-skip="5">+5 秒</button>
+          <button data-skip="-5">−5 秒</button><button data-skip="-1">−1 秒</button><button data-skip="-0.5">−0.5 秒</button><button data-skip="0.5">+0.5 秒</button><button data-skip="1">+1 秒</button><button data-skip="5">+5 秒</button>
           <button data-act="restart">⟲ 從頭</button><button data-act="clear">清除</button>
         </div>
         <div class="th-gain">音量 <input type="range" min="0" max="100" step="5" class="th-g"><span class="th-gv">100</span></div>
@@ -248,10 +252,26 @@ input.dt{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(2
       <div class="muted" style="margin-bottom:6px">兩台一起（同一個時間點，進度才會對齊）：</div>
       <div class="th-btns">
         <button class="primary" id="th-setboth">兩台同時開始（用上面兩個網址）</button>
-        <button data-both="play">▶ 同時播放</button><button data-both="pause">⏸ 同時暫停</button><button data-both="restart">⟲ 同時從頭</button>
+        <button data-both="play">同時繼續</button><button data-both="pause">同時暫停</button><button data-both="restart">兩台同時從頭開始</button>
         <button data-bskip="-10">兩台 −10 秒</button><button data-bskip="10">兩台 +10 秒</button>
       </div>
-      <div class="muted" style="margin-top:8px">對不齊時：用單台的 ±1／±5 秒微調，直到兩邊畫面一致。</div>
+      <div class="muted" style="margin-top:8px">對不齊時可用單台的 ±0.5／±1／±5 秒微調；從頭開始會讓兩台都重新播放。</div>
+    </div>
+    <div class="th-sync">
+      <div id="th-delta">II − I：請先設定兩台影片</div>
+      <label for="th-offset">II 相對 I 的偏移秒數</label>
+      <input type="number" id="th-offset" step="any" value="0" aria-describedby="th-offset-help">
+      <div class="muted" id="th-offset-help">II 進度＝I 進度＋偏移，例如 −3.5 代表 II 落後 I 3.5 秒；直播會略過對齊。</div>
+      <div class="th-btns"><button id="th-align" class="primary">以 I 為準對齊 II</button></div>
+    </div>
+    <div class="th-presets">
+      <label for="th-preset-name">儲存常用組合（上方兩個網址與偏移）</label>
+      <input type="text" id="th-preset-name" maxlength="120" placeholder="組合名稱（選填）">
+      <div class="th-btns"><button id="th-preset-save">另存為新組合</button></div>
+      <label for="th-preset-list">常用組合</label>
+      <select id="th-preset-list"></select>
+      <div class="th-btns"><button id="th-preset-apply">套用組合並播放</button></div>
+      <div class="muted">只存在這個瀏覽器；套用時兩台一起換片，再依儲存的偏移對齊。</div>
     </div>
     <div id="th-msg" role="status" aria-live="polite"></div>
   </div>
@@ -608,7 +628,14 @@ if (pw) login();
   const $c = document.querySelector('#theater-card'); if (!$c) return;
   const say = (t, ok = true) => { const m = document.querySelector('#th-msg'); m.textContent = t; m.className = ok ? 'ok' : 'bad'; };
   const box = (k) => $c.querySelector(`.th-scr[data-k="${k}"]`);
-  const send = async (body, ok) => { try { const st = await api('theater', body); render(st); if (ok) say(ok); } catch (e) { say('失敗：' + e.message, false); } };
+  const send = async (body, ok) => { try { const st = await api('theater', body); render(st); if (st.message || ok) say(st.message || ok, !st.skipped); } catch (e) { say('失敗：' + e.message, false); } };
+  const offsetInput = $c.querySelector('#th-offset');
+  const readOffset = () => {
+    const n = Number(offsetInput.value);
+    if (!offsetInput.value.trim() || !Number.isFinite(n) || Math.abs(n) > Number.MAX_SAFE_INTEGER / 1000) { say('請輸入有效的偏移秒數，可為負數或小數', false); return null; }
+    return n;
+  };
+  const urls = () => ({ urlA: box('a').querySelector('.th-url').value.trim(), urlB: box('b').querySelector('.th-url').value.trim(), liveA: box('a').querySelector('.th-live').checked, liveB: box('b').querySelector('.th-live').checked });
   for (const k of ['a', 'b']) {
     const b = box(k), N = k === 'a' ? 'I' : 'II';
     b.querySelector('.th-url').addEventListener('input', (e) => { if (/\/live\//.test(e.target.value)) b.querySelector('.th-live').checked = true; });
@@ -628,16 +655,71 @@ if (pw) login();
   };
   $c.querySelectorAll('[data-both]').forEach((btn) => btn.onclick = () => send({ screen: 'both', action: btn.dataset.both }, btn.textContent.trim()));
   $c.querySelectorAll('[data-bskip]').forEach((btn) => btn.onclick = () => send({ screen: 'both', action: 'skip', seconds: Number(btn.dataset.bskip) }, btn.textContent.trim()));
+  $c.querySelector('#th-align').onclick = () => {
+    const offset = readOffset(); if (offset === null) return;
+    send({ screen: 'b', action: 'align', offset }, '已以 I 為準對齊 II');
+  };
+  const presetKey = 'hall-admin-theater-presets';
+  const presetList = $c.querySelector('#th-preset-list');
+  const validPreset = (p) => p && typeof p.name === 'string' && typeof p.urlA === 'string' && p.urlA.trim() && typeof p.urlB === 'string' && p.urlB.trim() && typeof p.offset === 'number' && Number.isFinite(p.offset) && Math.abs(p.offset) <= Number.MAX_SAFE_INTEGER / 1000;
+  const readPresets = () => {
+    try { const items = JSON.parse(stored('localStorage', presetKey) || '[]'); return Array.isArray(items) ? items.filter(validPreset) : []; }
+    catch (_) { return []; }
+  };
+  let presets = readPresets();
+  const renderPresets = () => {
+    presetList.replaceChildren();
+    if (!presets.length) presetList.add(new Option('尚未儲存組合', ''));
+    presets.forEach((p, i) => presetList.add(new Option(`${p.name}（偏移 ${p.offset} 秒）`, String(i))));
+    $c.querySelector('#th-preset-apply').disabled = !presets.length;
+  };
+  $c.querySelector('#th-preset-save').onclick = () => {
+    const offset = readOffset(); if (offset === null) return;
+    const pair = urls(); if (!pair.urlA || !pair.urlB) return say('請先填入 I 與 II 的網址', false);
+    const items = readPresets();
+    const name = $c.querySelector('#th-preset-name').value.trim() || `組合 ${items.length + 1}`;
+    items.push({ name, ...pair, offset });
+    try { localStorage.setItem(presetKey, JSON.stringify(items)); }
+    catch (_) { return say('瀏覽器無法儲存組合，請允許本機儲存空間後重試', false); }
+    presets = items; renderPresets(); presetList.value = String(presets.length - 1); say('已儲存新組合');
+  };
+  $c.querySelector('#th-preset-apply').onclick = () => {
+    const p = presets[Number(presetList.value)]; if (!validPreset(p)) return say('請先選擇有效的組合', false);
+    box('a').querySelector('.th-url').value = p.urlA; box('b').querySelector('.th-url').value = p.urlB;
+    box('a').querySelector('.th-live').checked = p.liveA ?? /\/live\//.test(p.urlA);
+    box('b').querySelector('.th-live').checked = p.liveB ?? /\/live\//.test(p.urlB);
+    offsetInput.value = p.offset;
+    send({ screen: 'both', action: 'set', ...urls(), offset: p.offset }, `已套用「${p.name}」並播放`);
+  };
+  renderPresets();
+  // 以最近一次伺服器快照為基準，用單調時鐘每秒更新，暫停／直播不外推。
+  let snapshot = null, receivedAt = 0;
+  const mmss = (s) => { s = Math.floor(Math.max(0, s)); return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); };
+  const position = (c, elapsed) => Math.min(c.dur || Infinity, Math.max(0, c.position + (c.playing && !c.live ? elapsed : 0)));
+  const tick = () => {
+    if (!snapshot) return;
+    const elapsed = (performance.now() - receivedAt) / 1000;
+    for (const k of ['a', 'b']) {
+      const c = snapshot[k];
+      const info = box(k).querySelector('.i'); info.classList.add('th-clock');
+      info.textContent = !c ? '待機畫面' : c.live ? `直播 · ${c.playing ? '播放中' : '已暫停'}（無進度）` : `${c.playing ? '播放中' : '已暫停'} · ${mmss(position(c, elapsed))} / ${c.dur ? mmss(c.dur) : '--:--'}`;
+    }
+    const { a, b } = snapshot;
+    const delta = a && b && !a.live && !b.live ? position(b, elapsed) - position(a, elapsed) : null;
+    $c.querySelector('#th-delta').textContent = !a || !b ? 'II − I：請先設定兩台影片' : a.live || b.live ? 'II − I：直播沒有進度，無法比較' : `II − I：${delta >= 0 ? '+' : ''}${delta.toFixed(2)} 秒`;
+  };
   window.renderTheater = (th) => {
+    snapshot = th; receivedAt = performance.now();
     for (const k of ['a', 'b']) {
       const c = th[k], b = box(k), img = b.querySelector('img');
       if (c) { if (!img.src.includes(c.id)) img.src = `https://i.ytimg.com/vi/${c.id}/mqdefault.jpg`; img.style.visibility = ''; }
       else { img.removeAttribute('src'); img.style.visibility = 'hidden'; }
       b.querySelector('.t').textContent = c ? (c.title || c.id) : '尚未設定';
-      b.querySelector('.i').textContent = !c ? '待機畫面' : c.live ? '直播中' : `${c.playing ? '播放中' : '已暫停'} · ${fmt(c.position)}${c.dur ? ' / ' + fmt(c.dur) : ''}`;
       const g = b.querySelector('.th-g'); if (document.activeElement !== g) { g.value = c ? c.gain : 100; b.querySelector('.th-gv').textContent = g.value; }
     }
+    tick();
   };
+  setInterval(tick, 1000);
 })();
 </script>
 </body></html>
