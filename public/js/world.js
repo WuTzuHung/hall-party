@@ -7,6 +7,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import * as T from './textures.js';
 import { buildTrophy } from './trophy.js';
 import { reliefPanel } from './relief.js';
+import { buildPoster } from './poster.js';
 
 export const SCREEN = { x: 0, y: 6.14, z: -57.9, w: 14, h: 7.875 };
 export const HALL = { x0: -14, x1: 14, z0: -58, z1: -6 };
@@ -70,6 +71,7 @@ function place(geo, { x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, sx = 1, sy = 
 }
 
 let MATS = {};
+let POSTER = null; // BLG 海報（供測試工具取用）
 let B; // 目前的 batch
 const walls = []; // 碰撞方塊 {x0,x1,z0,z1,y0,y1}
 const floors = []; // 地面 {x0,x1,z0,z1,y} 或 坡道 {.., ya, yb} (沿 z: z0 -> ya, z1 -> yb)
@@ -194,6 +196,7 @@ export function buildWorld(scene, renderer, q) {
     setLights(on, instant = false) { LIGHT.target = on ? 1 : 0; if (instant) LIGHT.k = LIGHT.target; return LIGHT.target === 1; },
     get lightsOn() { return LIGHT.target === 1; },
     get lightLevel() { return LIGHT.k; },
+    get poster() { return POSTER; },
   };
 }
 
@@ -834,6 +837,30 @@ function buildInterior(scene, anim, q, renderer) {
     for (const sg of [-1, 1]) { // 兩端的小托座
       box(sg * 7.62 - 0.16, 10.5, EZ, sg * 7.62 + 0.16, 10.78, -57.8, 'plain');
     }
+  }
+  // BLG 海報：大螢幕正上方的拱形山牆（全場面向螢幕都看得到），鎏金畫框；關燈時 Knight 雙眼射出雷射依序掃過四人（poster.js）
+  {
+    const PH = 3.6, PY = 14.55, WZ = -58, pz = WZ + 0.2;
+    const po = buildPoster(PH); POSTER = po; const hw = po.width / 2, hh = PH / 2;
+    po.mesh.position.set(0, PY, pz); scene.add(po.mesh);
+    const zb = (x0, y0, x1, y1, d0, d1, key) => box(x0, PY + y0, WZ + d0, x1, PY + y1, WZ + d1, key);
+    zb(-hw - 0.02, -hh - 0.02, hw + 0.02, hh + 0.02, 0, 0.18, 'dark'); // 背板
+    const f = 0.17, fo = 0.06;                                          // 畫框寬、外圈石膏線寬
+    for (const sg of [-1, 1]) {
+      zb(Math.min(sg * hw, sg * (hw + f)), -hh - f, Math.max(sg * hw, sg * (hw + f)), hh + f, 0, 0.3, 'gold');   // 左右框
+      zb(Math.min(sg * (hw + f), sg * (hw + f + fo)), -hh - f - fo, Math.max(sg * (hw + f), sg * (hw + f + fo)), hh + f + fo, 0, 0.22, 'plain');
+      zb(Math.min(sg * (hw - 0.025), sg * hw), -hh, Math.max(sg * (hw - 0.025), sg * hw), hh, 0.18, 0.24, 'gold'); // 內緣金線
+    }
+    for (const sg of [-1, 1]) {
+      const y0 = sg > 0 ? hh : -hh - f, y1 = sg > 0 ? hh + f : -hh;
+      zb(-hw, y0, hw, y1, 0, 0.3, 'gold');
+      zb(-hw - f - fo, sg > 0 ? hh + f : -hh - f - fo, hw + f + fo, sg > 0 ? hh + f + fo : -hh - f, 0, 0.22, 'plain');
+      zb(-hw + 0.025, Math.min(sg * hh, sg * (hh - 0.025)), hw - 0.025, Math.max(sg * hh, sg * (hh - 0.025)), 0.18, 0.24, 'gold');
+    }
+    // 雷射時畫框周圍牆面的紅光（加法混合）
+    const halo = new THREE.Mesh(new THREE.PlaneGeometry(PH * 2.4, PH * 2.0), new THREE.MeshBasicMaterial({ map: glowTex(), color: 0xff2414, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }));
+    halo.position.set(0, PY - 0.3, WZ + 0.015); scene.add(halo);
+    onLights((e, _in, t) => { po.update(t, e); halo.material.opacity = 0.55 * po.state.halo; halo.visible = po.state.halo > 0.002; });
   }
   box(-7.5, 0, -58, 7.5, 0.45, -55.5, 'clothDark');
   box(-7.54, 0.3, -55.56, 7.54, 0.36, -55.46, 'ledPurple');
