@@ -273,3 +273,99 @@ body.touch #ad-login input{font-size:16px}
 #vol-n{min-width:2.1em;text-align:right;font-variant-numeric:tabular-nums;font-size:12px;color:var(--muted)}
 body.touch #vol{height:6px;width:84px} body.touch #vol::-webkit-slider-thumb{width:20px;height:20px}
 @media (max-width:560px){ #vol{width:70px} #vol-n{display:none} #vol-pill{padding:8px 10px} }
+
+/* ---- 小地圖（左上，半透明） ---- */
+#travel-col{position:absolute;left:max(14px,env(safe-area-inset-left));top:calc(max(12px,env(safe-area-inset-top)) + 46px);display:flex;flex-direction:column;
+  align-items:flex-start;gap:12px;pointer-events:none}
+#minimap{--mw:128px;position:relative;width:var(--mw);
+  padding:6px 6px 7px;border-radius:14px;pointer-events:auto;cursor:pointer;user-select:none;-webkit-user-select:none;
+  background:linear-gradient(180deg,rgba(18,11,34,.5),rgba(12,7,24,.4));border:1px solid rgba(224,189,106,.25);
+  box-shadow:0 8px 24px rgba(0,0,0,.25),inset 0 0 0 1px rgba(255,255,255,.03);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
+  opacity:.8;transition:opacity .25s,width .28s cubic-bezier(.2,.8,.2,1),background .25s,border-color .25s,box-shadow .25s}
+#minimap:hover{opacity:.95}
+#minimap canvas{display:block;width:100%;aspect-ratio:31.2/67.8;border-radius:8px}
+#minimap .mm-head{display:flex;align-items:baseline;justify-content:space-between;padding:0 3px 4px;line-height:1}
+#minimap .mm-t{font:700 9.5px "Cinzel",serif;letter-spacing:.3em;color:var(--gold)}
+#minimap .mm-sub{font-size:9.5px;color:var(--muted);letter-spacing:.12em;opacity:.8}
+#minimap .mm-pick{display:none;position:absolute;left:calc(100% + 10px);top:6px;white-space:nowrap;padding:8px 12px;border-radius:12px;
+  background:rgba(22,14,40,.78);border:1px solid rgba(184,151,255,.45);color:#e9ddff;font-weight:700;font-size:13px;letter-spacing:.08em;
+  box-shadow:0 6px 20px rgba(0,0,0,.35),0 0 18px rgba(167,123,255,.25);animation:cf-in .2s ease-out}
+#minimap .mm-pick small{display:block;margin-top:2px;font-weight:400;font-size:11px;color:var(--muted);letter-spacing:.04em}
+#minimap .mm-names{position:absolute;left:6px;right:6px;bottom:7px;top:21px;pointer-events:none}
+.mm-name{position:absolute;transform:translate(10px,-50%);white-space:nowrap;padding:2px 7px 2px 5px;border-radius:7px;font-size:11px;font-weight:700;
+  color:#efe6ff;background:rgba(30,18,58,.82);border:1px solid rgba(184,151,255,.4);opacity:0;transition:opacity .2s;pointer-events:none}
+.mm-name b{display:inline-block;min-width:15px;margin-right:4px;padding:0 3px;border-radius:4px;background:rgba(143,240,255,.18);color:#8ff0ff;font:700 10px/15px "Cinzel",serif;text-align:center}
+.mm-name[data-side=ru]{transform:translate(9px,-105%)}
+.mm-name[data-side=rd]{transform:translate(9px,5%)}
+.mm-name.home{color:#ffe7a8;border-color:rgba(242,207,122,.45);background:rgba(50,34,10,.82)}
+#minimap.picking{--mw:min(210px,calc((100dvh - 150px) * .46));opacity:1;background:linear-gradient(180deg,rgba(24,14,46,.78),rgba(14,8,28,.72));
+  border-color:rgba(184,151,255,.55);box-shadow:0 14px 40px rgba(0,0,0,.45),0 0 0 1px rgba(167,123,255,.15),0 0 28px rgba(167,123,255,.22)}
+#minimap.picking .mm-pick{display:block}
+#minimap.picking .mm-name{opacity:1;pointer-events:auto;cursor:pointer}
+#minimap.picking .mm-name:hover{background:rgba(70,40,130,.92)}
+
+/* ---- 回城／傳送按鈕 ---- */
+#travel-btns{display:flex;gap:12px;padding-left:4px;padding-bottom:18px;pointer-events:none}
+.tv-btn{--cd:0deg;--c:var(--gold);position:relative;width:46px;height:46px;padding:0;border-radius:50%;pointer-events:auto;display:grid;place-items:center;
+  color:var(--c);border:1px solid rgba(224,189,106,.45);background:radial-gradient(circle at 50% 35%,rgba(60,40,96,.85),rgba(16,10,32,.86));
+  box-shadow:0 6px 16px rgba(0,0,0,.35),inset 0 0 0 2px rgba(0,0,0,.25),inset 0 0 12px rgba(224,189,106,.12);
+  touch-action:none;user-select:none;-webkit-user-select:none;transition:transform .12s,box-shadow .2s,border-color .2s;opacity:.86}
+.tv-btn:hover{opacity:1}
+.tv-btn .tv-ico{display:grid;place-items:center;width:26px;height:26px;filter:drop-shadow(0 0 4px currentColor)}
+.tv-btn .tv-ico svg{width:100%;height:100%}
+#btn-tp{--c:#c9b0ff;border-color:rgba(184,151,255,.5)}
+.tv-btn.press{transform:scale(.92)}
+.tv-btn.active{opacity:1;box-shadow:0 0 0 2px var(--c),0 0 18px var(--c),0 6px 16px rgba(0,0,0,.35)}
+.tv-btn .tv-cd{position:absolute;inset:0;border-radius:50%;pointer-events:none;
+  background:conic-gradient(rgba(6,3,14,.72) var(--cd),transparent 0)}
+.tv-btn .tv-n{position:absolute;inset:0;display:grid;place-items:center;font:800 15px "Noto Sans TC",sans-serif;color:#fff;text-shadow:0 1px 3px #000;pointer-events:none}
+.tv-btn.cooling .tv-ico{opacity:.45;filter:none}
+.tv-btn .tv-key{position:absolute;right:-5px;bottom:-4px;min-width:17px;height:17px;padding:0 4px;border-radius:5px;font:700 10px/16px "Cinzel",serif;
+  color:#1b1206;background:linear-gradient(180deg,#f6dc95,#d4a748);box-shadow:0 2px 5px rgba(0,0,0,.4)}
+#btn-tp .tv-key{background:linear-gradient(180deg,#e2d2ff,#a982ff)}
+.tv-btn .tv-lbl{position:absolute;top:calc(100% + 3px);left:50%;transform:translateX(-50%);white-space:nowrap;font-size:11px;font-weight:700;letter-spacing:.15em;
+  color:var(--ink);text-shadow:0 1px 4px rgba(0,0,0,.8);opacity:.85}
+.tv-btn.ready-flash::after{content:"";position:absolute;inset:-3px;border-radius:50%;border:2px solid var(--c);animation:tv-ready .6s ease-out forwards;pointer-events:none}
+@keyframes tv-ready{from{opacity:1;transform:scale(.9)}to{opacity:0;transform:scale(1.35)}}
+body.tp-picking #btn-tp{opacity:1}
+
+/* ---- 引導讀條 ---- */
+#channel{position:absolute;left:50%;bottom:150px;transform:translateX(-50%);width:min(300px,70vw);pointer-events:none;text-align:center;
+  animation:cf-in .2s ease-out;--c1:#b8913f;--c2:#ffe7a8;--glow:rgba(255,217,138,.6)}
+#channel.tp{--c1:#7a52e0;--c2:#9ff3ff;--glow:rgba(167,123,255,.65)}
+#channel .ch-top{display:flex;justify-content:space-between;align-items:baseline;padding:0 2px 5px;text-shadow:0 1px 6px rgba(0,0,0,.9)}
+#channel .ch-name{font-weight:900;font-size:15px;letter-spacing:.3em;color:var(--c2)}
+#channel .ch-t{font:700 13px "Cinzel",serif;color:var(--ink);font-variant-numeric:tabular-nums}
+#channel .ch-bar{position:relative;height:9px;border-radius:6px;overflow:hidden;background:rgba(10,6,20,.75);
+  border:1px solid rgba(224,189,106,.55);box-shadow:0 0 0 1px rgba(0,0,0,.5),0 4px 14px rgba(0,0,0,.5)}
+#channel.tp .ch-bar{border-color:rgba(184,151,255,.6)}
+#channel .ch-bar i{position:absolute;inset:0;transform-origin:left;transform:scaleX(0);background:linear-gradient(90deg,var(--c1),var(--c2));box-shadow:0 0 12px var(--glow)}
+#channel .ch-bar b{position:absolute;top:-3px;bottom:-3px;width:14px;margin-left:-7px;background:radial-gradient(closest-side,#fff,rgba(255,255,255,0));opacity:.9}
+#channel .ch-sub{margin-top:5px;font-size:12px;color:var(--muted);letter-spacing:.1em;text-shadow:0 1px 4px rgba(0,0,0,.9)}
+#channel.done .ch-bar i{transform:scaleX(1)!important;filter:brightness(1.4)}
+#channel.done .ch-bar b{display:none}
+#channel.fail .ch-bar i{background:linear-gradient(90deg,#6b2a3a,#c25a6e);box-shadow:none}
+#channel.fail .ch-sub{color:#ffb3bd}
+#channel.fail,#channel.done{transition:opacity .4s .4s;opacity:0}
+
+/* 桌機：提示列在最下方時，讀條往上避開 */
+body:not(.touch) #channel{bottom:118px}
+
+/* ---- 手機版 ---- */
+body.touch #travel-col{top:calc(max(10px,env(safe-area-inset-top)) + 40px)}
+body.touch #minimap{--mw:76px;padding:4px 4px 5px;border-radius:11px}
+body.touch #minimap .mm-head{padding:0 2px 3px}
+body.touch #minimap .mm-sub{display:none}
+body.touch #minimap.picking{--mw:min(176px,calc((100dvh - 120px) * .46))}
+body.touch #minimap .mm-names{left:4px;right:4px;bottom:5px;top:16px}
+body.touch #minimap .mm-pick{left:0;top:calc(100% + 8px)}
+body.touch #travel-btns{position:fixed;padding:0;top:auto;left:auto;right:max(22px,env(safe-area-inset-right));bottom:max(104px,calc(env(safe-area-inset-bottom) + 92px));
+  width:132px;height:84px;display:block}
+body.touch .tv-btn{position:absolute;width:50px;height:50px}
+body.touch #btn-recall{right:84px;bottom:-74px}
+body.touch #btn-tp{right:6px;bottom:6px}
+body.touch .tv-btn .tv-lbl{font-size:10px;top:calc(100% + 1px)}
+body.touch #btn-sit{bottom:max(186px,calc(env(safe-area-inset-bottom) + 174px))}
+body.touch #admin-dock{right:max(160px,calc(env(safe-area-inset-right) + 160px))}
+body.touch #channel{bottom:max(206px,calc(env(safe-area-inset-bottom) + 196px))}
+@media (max-height:500px){ body.touch #minimap{--mw:58px} body.touch #minimap.picking{--mw:min(150px,calc((100dvh - 70px) * .46))} }

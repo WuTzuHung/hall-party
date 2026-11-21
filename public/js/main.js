@@ -5,6 +5,7 @@ import { Avatar } from './avatar.js';
 import { BigScreen } from './screen.js';
 import { initChat } from './chat.js';
 import { initAdminDock } from './admin-dock.js';
+import { initTravel } from './travel.js';
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -111,6 +112,11 @@ addEventListener('keydown', (e) => {
     e.preventDefault(); clearKeys(); chat.open(); return;
   }
   keys[e.code] = true;
+  // 回城（B）、傳送（F 開啟小地圖選點，1–5 直接選）、Esc 取消選點
+  if (e.code === 'KeyB' && !e.repeat) { travel.recall(); return; }
+  if (e.code === 'KeyF' && !e.repeat) { travel.togglePick(); return; }
+  if (travel.picking && /^(Digit|Numpad)[1-5]$/.test(e.code)) { travel.teleport(Number(e.code.slice(-1)) - 1); return; }
+  if (e.code === 'Escape' && travel.picking) { travel.setPick(false); return; }
   if (e.code === 'KeyE' && !e.repeat) toggleSit();
   if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) jumpQueued = performance.now(); }
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
@@ -223,6 +229,7 @@ function findSeat() {
   return best;
 }
 function toggleSit() {
+  if (travel.channeling) travel.cancel(false);
   if (me.seat) { standUp(); return; }
   if (!me.onGround) return;
   const s = (nearSeat && !seatTaken(nearSeat) ? nearSeat : null) || findSeat();
@@ -437,7 +444,8 @@ function connect() {
         $('#queue-text').textContent = `目前 ${m.online} / ${m.max} 人在線，你排在第 ${m.position} 位。`; break;
       case 's': onSnapshot(m); break;
       case 'join': addRemote(m.id, m.c, m); break;
-      case 'leave': removeRemote(m.id); break;
+      case 'leave': removeRemote(m.id); travel.forget(m.id); break;
+      case 'fx': if (m.id !== me.id) travel.onRemote(m); break;
       case 'chat': onChat(m); break;
       case 'info': for (const o of m.p) { const r = remotes.get(o.id); if (r && r.needInfo) { removeRemote(o.id); addRemote(o.id, o.c, { ...r.last, n: o.n }); } } break;
       case 'media': onMedia(m.m); break;
@@ -504,6 +512,7 @@ function onWelcome(m) {
     me.pos.set(SPAWN.x + (Math.random() - 0.5) * 6, 0.15, SPAWN.z + (Math.random() - 0.5) * 1.5);
     me.ry = Math.PI; cam.yaw = 0; cam.pitch = 0.12; cam.dist = cam.targetDist = 6; me.camY = me.pos.y;
     if (isTouch) $('#btn-jump').classList.remove('hidden');
+    travel.show();
     if (restoreSnap) restoreFrom(restoreSnap);
     else { toast('歡迎！往前走進大門，大螢幕就在大廳盡頭', 4500); }
     setTimeout(() => $('#hint').classList.add('fade'), restoreSnap ? 2000 : 12000);
@@ -566,6 +575,8 @@ function onSnapshot(m) {
     if (id === me.id) continue;
     let r = remotes.get(id);
     if (!r) { addRemote(id, 'pink', { x, y, z, ry, a }); r = remotes.get(id); unknown.push(id); }
+    // 位置一次跳很遠（傳送、回城）：直接移過去，不要從半空中滑過整個大廳
+    if (Math.hypot(x - r.av.root.position.x, z - r.av.root.position.z) > 6) { r.av.root.position.set(x, y + (a > 4.5 && a < 5.5 ? 0.55 : 0), z); r.ry = ry; }
     r.tx = x; r.ty = y; r.tz = z; r.try = ry; r.a = a; r.sitting = a > 4.5 && a < 5.5; r.air = a >= 6; r.seen = now; r.last = { x, y, z, ry, a };
   }
   if (unknown.length && ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'info', ids: unknown }));
@@ -587,6 +598,31 @@ const chat = initChat({
 // 管理員控制台（有存管理密碼且驗證成功才顯示）
 const dock = initAdminDock({ toast, onFocus: () => { clearKeys(); unlockPointer(); }, isTouch });
 $('#btn-rechar').addEventListener('click', changeCharacter);
+// 傳送與回城（左上角小地圖）
+const travel = initTravel({
+  scene, hud: $('#hud'), isTouch, toast, send: wsSend, me,
+  getAvatar: (id) => remotes.get(id)?.av || null,
+  beforeChannel: () => { if (me.seat) standUp(); jumpQueued = -1e9; },
+  onPickOpen: () => { clearKeys(); unlockPointer(); },
+  // 抵達：在目的地附近找一個站得下的位置，面向大螢幕
+  place: (d) => {
+    let spot = null;
+    for (let r = 0; r <= 3 && !spot; r += 0.5) for (let k = 0; k < (r ? 12 : 1) && !spot; k++) {
+      const a = k / 12 * Math.PI * 2 + Math.random() * 0.3, x = d.x + Math.cos(a) * r + (r ? 0 : (Math.random() - 0.5) * 0.8), z = d.z + Math.sin(a) * r;
+      let crowd = false; // 不要和其他人疊在一起
+      for (const rr of remotes.values()) { const q = rr.av.root.position; if (Math.abs(q.y - d.y) < 2 && Math.hypot(q.x - x, q.z - z) < 0.85) { crowd = true; break; } }
+      if (crowd) continue;
+      const g = freeSpot(x, d.y, z); if (g !== null) spot = [x, g, z];
+    }
+    if (!spot) spot = [d.x, d.y, d.z];
+    me.pos.set(spot[0], spot[1], spot[2]); me.vy = 0; me.onGround = true; me.jumping = false; me.airT = 0; me.camY = me.pos.y;
+    me.ry = Math.PI; cam.yaw = 0; cam.pitch = Math.min(cam.pitch, 0.25); me.speed = 0;
+    sendNow();
+    return { x: spot[0], y: spot[1], z: spot[2] };
+  },
+});
+travel.setAvatars(() => [...remotes].map(([id, r]) => [id, r.av]));
+travel.setViewYaw(() => cam.yaw);
 function sendNow() { lastSend = 0; }
 function netSend(now) {
   if (!ws || ws.readyState !== 1 || !entered) return;
@@ -609,6 +645,7 @@ function updateMe(dt) {
   if (keys.KeyA || keys.ArrowLeft) ix -= 1; if (keys.KeyD || keys.ArrowRight) ix += 1;
   if (joy.active) { ix += joy.x; iz += joy.y; }
   const il = Math.hypot(ix, iz);
+  if (travel.channeling && (il > 0.05 || me.jumping || performance.now() - jumpQueued < 160)) travel.interrupt(); // 移動、跳躍會打斷回城／傳送
   if (me.seat) { if (il > 0.3 && (viewMode === 'seat' || viewMode === 'normal')) standUp(); else { me.speed = 0; jumpQueued = -1e9; return; } }
   const run = keys.ShiftLeft || keys.ShiftRight || (joy.active && il > 0.95);
   // 跳躍：站著、走路、跑步時都可以（坐著、在空中不行；離地 0.1 秒內仍可起跳）
@@ -720,6 +757,7 @@ function frame() {
     updateLabels(dt);
     expireRemotes(now);
     $('#btn-jump').classList.toggle('hidden', !isTouch || !!me.seat);
+    travel.update(dt, t);
     netSend(now);
     // 附近椅子提示
     if (!me.seat) {
@@ -780,4 +818,4 @@ const jumpBtn = $('#btn-jump');
 jumpBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); jumpQueued = performance.now(); jumpBtn.classList.add('press'); });
 for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) jumpBtn.addEventListener(ev, () => jumpBtn.classList.remove('press'));
 jumpBtn.addEventListener('contextmenu', (e) => e.preventDefault());
-window.__hall = { seatOcc, checkVersion, get media() { return mediaState; }, screen, dock, me, cam, camera, scene, world, remotes, toggleSit, collide, groundAt, freeSpot, chat, jump: () => { jumpQueued = performance.now(); }, get ws() { return ws; }, get viewMode() { return viewMode; }, enterFull, exitFull };
+window.__hall = { travel, seatOcc, checkVersion, get media() { return mediaState; }, screen, dock, me, cam, camera, scene, world, remotes, toggleSit, collide, groundAt, freeSpot, chat, jump: () => { jumpQueued = performance.now(); }, get ws() { return ws; }, get viewMode() { return viewMode; }, enterFull, exitFull };
