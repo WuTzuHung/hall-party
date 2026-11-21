@@ -4,6 +4,7 @@ import { buildWorld, SPAWN, HALL, SCREEN } from './world.js';
 import { Avatar } from './avatar.js';
 import { BigScreen, ScreenLayer } from './screen.js';
 import { TSCREENS, TFOCUS, THEATER, inTheater } from './district.js';
+import { tvLayout } from './tv-layout.js';
 import { initChat } from './chat.js';
 import { initAdminDock } from './admin-dock.js';
 import { initTravel } from './travel.js';
@@ -52,6 +53,7 @@ function updateZone() {
   const x = me.pos.x, w = zoneWall ? x < -68.5 : x < -69.5;
   if (w === zoneWall) return;
   zoneWall = w;
+  if (!w && viewMode === 'flat') tvSet('hall');
   screen.setActive(!w); for (const t of tScreens) t.setActive(w);
   updateVolume(); updateSoundButton();
 }
@@ -87,7 +89,22 @@ function groundAt(x, z, y) {
 }
 // 牆擋住玩家的條件：腳高於 y1 - st 就可以跨上去（st 預設 0.35；台階型方塊用 0.55，與地面自動跨階一致）
 const blocks = (c, y) => y + (c.st || 0.35) < c.y1 && y + 1.5 > c.y0;
+// 圓弧城牆：牆中心線半徑 R、半厚（含牆腳）t；城門那段直牆（|dz| < L、在東側）由一般碰撞方塊處理
+const ringHit = (g, x, z, y) => {
+  if (y > g.h) return null;
+  const dx = x - g.x, dz = z - g.z; if (dx > 0 && Math.abs(dz) < g.L) return null;
+  const d = Math.hypot(dx, dz), pen = g.t + R - Math.abs(d - g.R);
+  return pen > 0 ? { dx, dz, d } : null;
+};
+function collideRings(p) {
+  for (const g of world.rings || []) {
+    const h = ringHit(g, p.x, p.z, p.y); if (!h || h.d < 1e-6) continue;
+    const r = h.d > g.R ? g.R + g.t + R : g.R - g.t - R;
+    p.x = g.x + h.dx / h.d * r; p.z = g.z + h.dz / h.d * r;
+  }
+}
 function collide(p) {
+  collideRings(p);
   for (let it = 0; it < 2; it++) for (const c of world.walls) {
     if (!blocks(c, p.y)) continue;
     const cx = Math.max(c.x0, Math.min(p.x, c.x1)), cz = Math.max(c.z0, Math.min(p.z, c.z1));
@@ -102,6 +119,7 @@ function collide(p) {
 }
 // 某個位置是否站得下（不與任何碰撞方塊重疊，且腳下有地面、不會掉下去）；回傳地面高度或 null
 function freeSpot(x, y, z) {
+  for (const g of world.rings || []) if (ringHit(g, x, z, y)) return null;
   for (const c of world.walls) {
     if (!blocks(c, y)) continue;
     const cx = Math.max(c.x0, Math.min(x, c.x1)), cz = Math.max(c.z0, Math.min(z, c.z1));
@@ -129,9 +147,10 @@ addEventListener('keydown', (e) => {
   if (!$('#help').classList.contains('hidden')) { if (e.code === 'Escape' || e.code === 'Enter') $('#help').classList.add('hidden'); return; }
   // 剛點過的 HUD 按鈕還留著焦點時，空白鍵／Enter 會再按一次那顆按鈕：先把焦點移走
   if (document.activeElement && document.activeElement.tagName === 'BUTTON') document.activeElement.blur();
-  if ((e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'Slash' || e.code === 'KeyT') && viewMode !== 'full') {
+  if ((e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'Slash' || e.code === 'KeyT') && viewMode !== 'full' && viewMode !== 'flat') {
     e.preventDefault(); clearKeys(); chat.open(); return;
   }
+  if (tvKey(e)) { e.preventDefault(); return; }
   keys[e.code] = true;
   // 回城（B）、傳送（F 開啟小地圖選點，1–9 直接選）、Esc 取消選點
   if (e.code === 'KeyB' && !e.repeat) { travel.recall(); return; }
@@ -146,7 +165,7 @@ addEventListener('keyup', (e) => { keys[e.code] = false; if (e.code === 'Space' 
 addEventListener('blur', clearKeys);
 
 // 滑鼠鎖定（FPS 式轉視角）：點一下畫面就鎖定，移動滑鼠直接轉；Esc 放開。沒鎖定時仍可拖曳
-const canLook = () => viewMode !== 'best' && viewMode !== 'full';
+const canLook = () => viewMode !== 'best' && viewMode !== 'full' && viewMode !== 'flat';
 const locked = () => document.pointerLockElement === canvas;
 function lockPointer() {
   if (isTouch || !entered || locked() || !canLook() || !canvas.requestPointerLock) return;
@@ -195,7 +214,7 @@ canvas.addEventListener('pointermove', (e) => {
     const [a, b] = [...pointers.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y);
     if (pinchD) {
       if (viewMode === 'best') bestD = THREE.MathUtils.clamp(bestD * (pinchD / d), 6, 42);
-      else if (viewMode !== 'full' && !zoomSeat(pinchD / d)) {
+      else if (viewMode !== 'full' && viewMode !== 'flat' && !zoomSeat(pinchD / d)) {
         const f = pinchD / d;
         cam.targetDist = viewMode === 'seat' && cam.targetDist < 0.3 && f > 1 ? 0.8 : THREE.MathUtils.clamp(cam.targetDist * f, cam.minD, cam.maxD);
         if (viewMode === 'seat' && cam.targetDist < 0.45 && f < 1) cam.targetDist = 0;
@@ -204,7 +223,7 @@ canvas.addEventListener('pointermove', (e) => {
     pinchD = d; return;
   }
   const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
-  if (viewMode === 'best' || viewMode === 'full') return;
+  if (viewMode === 'best' || viewMode === 'full' || viewMode === 'flat') return;
   const k = (isTouch ? 0.006 : 0.0045) * (camera.fov / 60);
   cam.yaw -= dx * k; cam.pitch = THREE.MathUtils.clamp(cam.pitch + dy * k, -1.2, 1.35);
 });
@@ -223,7 +242,7 @@ canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
   const f = Math.exp(e.deltaY * 0.0012);
   if (viewMode === 'best') { bestD = THREE.MathUtils.clamp(bestD * f, 6, zoneWall ? 30 : 42); return; }
-  if (viewMode === 'full') return;
+  if (viewMode === 'full' || viewMode === 'flat') return;
   if (zoomSeat(f)) return;
   cam.targetDist = cam.targetDist < 0.3 && e.deltaY > 0 ? 0.8 : THREE.MathUtils.clamp(cam.targetDist * f, cam.minD, cam.maxD);
   if (cam.targetDist < 0.45 && e.deltaY < 0) cam.targetDist = 0;
@@ -306,6 +325,7 @@ function setMode(m) {
   $('#btn-best').textContent = m === 'best' ? '✕ 取消最佳視角' : '🎯 最佳視角';
   $('#btn-best').classList.toggle('on', m === 'best');
   document.body.classList.toggle('mode-full', m === 'full');
+  document.body.classList.toggle('mode-flat', m === 'flat');
   $('#full-exit').classList.toggle('hidden', m !== 'full');
 }
 $('#btn-best').addEventListener('click', (e) => {
@@ -328,6 +348,150 @@ function exitFull() {
 }
 document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && viewMode === 'full') exitFull(); });
 addEventListener('keydown', (e) => { if (e.code === 'Escape' && !typing(e)) exitFull(); }); // 滑鼠鎖定時 Esc 只會先放開滑鼠（瀏覽器行為），再按一次才離開全螢幕
+
+// ---------- 觀影館的觀看方式（同時視聽，一個人看兩台） ----------
+// hall：在館內看（坐下、最佳視角、走遠走近都可以）；a、b：只看 I 或 II（滿版）；split：兩台並排（拖中間的把手調大小）；pip：子母畫面（點小畫面交換、拖到四個角）
+// 平面模式不畫 3D 場景，只把兩個 YouTube 播放器直接排在畫面上（播放器不重建、不中斷，同步照舊）
+const TV_NAMES = { hall: '館內觀看 · 可坐下、最佳視角或走遠一點看', a: '只看 I（滿版）', b: '只看 II（滿版）', split: '兩台並排 · 拖中間把手調整大小', pip: '子母畫面 · 點小畫面交換，拖到四個角落' };
+const TV_ORDER = ['hall', 'split', 'pip', 'a', 'b'];
+const tvL = { layout: 'hall', ratio: 0.5, swap: false, main: 'a', corner: 3, pipSize: 0.3 };
+const tvMute = { a: false, b: false };
+try { const v = JSON.parse(localStorage.getItem('hall-tv') || '{}'); for (const k of ['ratio', 'swap', 'main', 'corner', 'pipSize']) if (k in v) tvL[k] = v[k]; } catch (_) { }
+const tvSave = () => { try { localStorage.setItem('hall-tv', JSON.stringify({ ratio: tvL.ratio, swap: tvL.swap, main: tvL.main, corner: tvL.corner, pipSize: tvL.pipSize })); } catch (_) { } };
+let tvSaved = null, tvPrevMode = 'normal', tvFs = false, tvIdleT = 0;
+const tvCam = () => tScreens[0].obj.element.parentElement; // CSS3DRenderer 的相機層（螢幕元素的父層）
+const tvEls = () => tScreens.map((t) => t.obj.element);
+const tvHere = () => zoneWall && (viewMode === 'flat' || inTheater(me.pos.x, me.pos.z));
+function tvSet(l, quiet) {
+  if (!TV_ORDER.includes(l)) l = 'hall';
+  if (l !== 'hall' && !zoneWall) return;
+  const was = tvL.layout; tvL.layout = l;
+  if (l === 'hall') {
+    if (viewMode === 'flat') {
+      tvRestore();
+      setMode(me.seat ? (tvPrevMode === 'best' ? 'best' : 'seat') : 'normal');
+      if (viewMode === 'seat') seatView();
+      if (tvFs) { tvFs = false; try { if (document.fullscreenElement) document.exitFullscreen(); } catch (_) { } }
+    }
+  } else if (viewMode !== 'flat') {
+    tvPrevMode = viewMode === 'full' ? modeBeforeFull : viewMode;
+    const c = tvCam();
+    tvSaved = { t: c.style.transform, ts: c.style.transformStyle, els: tvEls().map((e) => ({ t: e.style.transform, d: e.style.display })) };
+    c.style.transformStyle = 'flat';
+    tvFs = !!document.fullscreenElement;
+    setMode('flat');
+    if (!document.fullscreenElement && !isTouch) { try { document.documentElement.requestFullscreen?.().then(() => { tvFs = true; }).catch(() => { }); } catch (_) { } }
+  }
+  tvPoke(); tvUI();
+  if (!quiet && l !== was) toast(TV_NAMES[l], 2200);
+}
+function tvRestore() {
+  const c = tvCam();
+  if (tvSaved) { c.style.transform = tvSaved.t; c.style.transformStyle = tvSaved.ts; tvEls().forEach((e, i) => { e.style.transform = tvSaved.els[i].t; e.style.display = tvSaved.els[i].d; }); }
+  for (const e of tvEls()) { e.style.opacity = ''; e.style.borderRadius = ''; e.style.boxShadow = ''; e.style.zIndex = ''; }
+  tvSaved = null;
+  $('#tv-hit').classList.add('hidden');
+}
+function tvSwap() {
+  if (tvL.layout === 'split') tvL.swap = !tvL.swap;
+  else if (tvL.layout === 'pip') tvL.main = tvL.main === 'a' ? 'b' : 'a';
+  else if (tvL.layout === 'a' || tvL.layout === 'b') { tvSet(tvL.layout === 'a' ? 'b' : 'a'); return; }
+  else return;
+  tvSave(); tvPoke();
+}
+// 每幀排版（只改 CSS transform，很省）
+let tvLast = null;
+function tvFrame() {
+  const W = innerWidth, H = innerHeight, single = tvL.layout === 'a' || tvL.layout === 'b';
+  const L = tvLast = tvLayout(W, H, { ...tvL, margin: single ? 0 : Math.round(Math.min(W, H) * 0.012), gap: Math.max(6, Math.round(Math.min(W, H) * 0.012)) });
+  const c = tvCam(); if (c.style.transform !== 'none') c.style.transform = 'none';
+  tScreens.forEach((t, i) => {
+    const r = L[i ? 'b' : 'a'], e = t.obj.element, s = r.w / 1280;
+    const tf = `translate(${(r.x + r.w / 2 - 640).toFixed(1)}px,${(r.y + r.h / 2 - 360).toFixed(1)}px) scale(${s.toFixed(4)})`;
+    if (e.style.transform !== tf) e.style.transform = tf;
+    if (e.style.display) e.style.display = '';
+    e.style.opacity = r.show ? '1' : '0';
+    e.style.zIndex = r.pip ? '2' : '1';
+    e.style.borderRadius = single ? '0' : (r.pip ? 8 : 4) / s + 'px';
+    e.style.boxShadow = r.pip ? `0 0 0 ${1.5 / s}px rgba(232,220,188,.6),0 ${12 / s}px ${34 / s}px rgba(0,0,0,.65)` : 'none';
+  });
+  tvHits(L);
+}
+// 互動層：子畫面（點一下交換、拖到角落）、並排的中間把手、I／II 標籤
+function tvHits(L) {
+  const hit = $('#tv-hit'); hit.classList.remove('hidden');
+  const pipK = L.a.pip ? 'a' : L.b.pip ? 'b' : null;
+  const pb = $('#tv-pip'), dv = $('#tv-div');
+  pb.classList.toggle('hidden', !pipK);
+  if (pipK && !tvDrag) { const r = L[pipK]; pb.style.cssText = `left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px`; }
+  dv.classList.toggle('hidden', !L.divider);
+  if (L.divider) { dv.classList.toggle('col', L.dir === 'col'); dv.style.left = L.divider.x + 'px'; dv.style.top = L.divider.y + 'px'; }
+  for (const k of ['a', 'b']) {
+    const tag = $('#tv-tag-' + k), r = L[k];
+    tag.classList.toggle('hidden', !r.show);
+    tag.style.left = r.x + 10 + 'px'; tag.style.top = r.y + 10 + 'px';
+    tag.classList.toggle('muted', tvMute[k]);
+  }
+}
+let tvDrag = null;
+$('#tv-pip').addEventListener('pointerdown', (e) => { e.preventDefault(); const r = e.currentTarget.getBoundingClientRect(); tvDrag = { k: 'pip', x: e.clientX, y: e.clientY, ox: r.left, oy: r.top, moved: false }; e.currentTarget.setPointerCapture(e.pointerId); tvPoke(); });
+$('#tv-pip').addEventListener('pointermove', (e) => {
+  if (!tvDrag || tvDrag.k !== 'pip') return;
+  const dx = e.clientX - tvDrag.x, dy = e.clientY - tvDrag.y; if (Math.hypot(dx, dy) > 8) tvDrag.moved = true;
+  if (tvDrag.moved) { e.currentTarget.style.left = tvDrag.ox + dx + 'px'; e.currentTarget.style.top = tvDrag.oy + dy + 'px'; e.currentTarget.classList.add('dragging'); }
+});
+$('#tv-pip').addEventListener('pointerup', (e) => {
+  if (!tvDrag || tvDrag.k !== 'pip') return;
+  const r = e.currentTarget.getBoundingClientRect(); e.currentTarget.classList.remove('dragging');
+  if (tvDrag.moved) { tvL.corner = (r.left + r.width / 2 > innerWidth / 2 ? 1 : 0) + (r.top + r.height / 2 > innerHeight / 2 ? 2 : 0); tvSave(); }
+  else tvSwap();
+  tvDrag = null;
+});
+$('#tv-div').addEventListener('pointerdown', (e) => { e.preventDefault(); tvDrag = { k: 'div' }; e.currentTarget.setPointerCapture(e.pointerId); e.currentTarget.classList.add('dragging'); });
+$('#tv-div').addEventListener('pointermove', (e) => {
+  if (!tvDrag || tvDrag.k !== 'div' || !tvLast) return;
+  const row = tvLast.dir === 'row', p = row ? e.clientX / innerWidth : e.clientY / innerHeight;
+  tvL.ratio = Math.min(0.75, Math.max(0.25, p)); tvPoke();
+});
+const tvDivEnd = (e) => { if (tvDrag?.k !== 'div') return; tvDrag = null; e.currentTarget.classList.remove('dragging'); tvSave(); };
+$('#tv-div').addEventListener('pointerup', tvDivEnd); $('#tv-div').addEventListener('pointercancel', tvDivEnd);
+$('#tv-div').addEventListener('dblclick', () => { tvL.ratio = 0.5; tvSave(); });
+// 工具列：館內時常駐；平面模式下 2.5 秒沒動作就淡出，動一下滑鼠或點畫面就回來
+function tvPoke() { tvIdleT = performance.now(); $('#tv-bar').classList.remove('idle'); document.body.classList.remove('tv-idle'); }
+addEventListener('pointermove', () => { if (viewMode === 'flat') tvPoke(); }, { passive: true });
+addEventListener('pointerdown', () => { if (viewMode === 'flat') tvPoke(); }, { passive: true });
+setInterval(() => { if (viewMode === 'flat' && !tvDrag && performance.now() - tvIdleT > 2600 && !$('#tv-bar').matches(':hover')) { $('#tv-bar').classList.add('idle'); document.body.classList.add('tv-idle'); } }, 400);
+function tvUI() {
+  const on = tvHere(); document.body.classList.toggle('tv-on', on);
+  $('#tv-bar').classList.toggle('hidden', !on);
+  if (!on) return;
+  for (const b of document.querySelectorAll('#tv-bar [data-tv]')) b.classList.toggle('on', b.dataset.tv === tvL.layout);
+  const l = tvL.layout;
+  $('#tv-swap').classList.toggle('hidden', l === 'hall');
+  $('#tv-corner').classList.toggle('hidden', l !== 'pip'); $('#tv-size').classList.toggle('hidden', l !== 'pip');
+  for (const k of ['a', 'b']) { const b = $('#tv-m' + k); b.classList.toggle('off', tvMute[k]); b.querySelector('i').textContent = tvMute[k] ? '🔇' : '🔊'; }
+}
+document.querySelectorAll('#tv-bar [data-tv]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); b.blur(); tvSet(b.dataset.tv); }));
+$('#tv-swap').addEventListener('click', (e) => { e.stopPropagation(); e.currentTarget.blur(); tvSwap(); });
+$('#tv-corner').addEventListener('click', (e) => { e.stopPropagation(); e.currentTarget.blur(); tvL.corner = [1, 3, 2, 0][tvL.corner] ?? 3; tvSave(); tvPoke(); });
+$('#tv-size').addEventListener('click', (e) => { e.stopPropagation(); e.currentTarget.blur(); const S = [0.22, 0.3, 0.4]; tvL.pipSize = S[(S.findIndex((v) => v >= tvL.pipSize - 0.001) + 1) % S.length]; tvSave(); tvPoke(); });
+for (const k of ['a', 'b']) $('#tv-m' + k).addEventListener('click', (e) => {
+  e.stopPropagation(); e.currentTarget.blur(); tvMute[k] = !tvMute[k]; updateVolume(); tvUI();
+  if (!soundOn) toast('先按右上角開啟聲音');
+  else toast(`${k === 'a' ? 'I' : 'II'} ${tvMute[k] ? '已靜音（只對你自己）' : '恢復聲音'}`);
+});
+// 鍵盤：V 切換觀看方式、X 交換、C 子畫面換角落、Esc 回到館內
+function tvKey(e) {
+  if (!tvHere() || e.repeat) return false;
+  if (e.code === 'KeyV') { const i = TV_ORDER.indexOf(tvL.layout); tvSet(TV_ORDER[(i + (e.shiftKey ? TV_ORDER.length - 1 : 1)) % TV_ORDER.length]); return true; }
+  if (viewMode !== 'flat') return false;
+  if (e.code === 'KeyX') { tvSwap(); return true; }
+  if (e.code === 'KeyC' && tvL.layout === 'pip') { $('#tv-corner').click(); return true; }
+  if (e.code === 'Escape') { tvSet('hall'); return true; }
+  return true; // 平面模式下其他按鍵（移動、跳）都不作用
+}
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && viewMode === 'flat' && tvFs) { tvFs = false; tvSet('hall'); } });
+setInterval(tvUI, 500);
 
 // ---------- UI ----------
 let toastT;
@@ -415,7 +579,7 @@ function saveSnap() {
   if (!entered || kicked) return;
   LS.set('hall-snap', {
     x: +me.pos.x.toFixed(2), y: +me.pos.y.toFixed(2), z: +me.pos.z.toFixed(2), ry: +me.ry.toFixed(2),
-    seat: me.seat ? me.seat.i : null, view: viewMode, yaw: +cam.yaw.toFixed(3), pitch: +cam.pitch.toFixed(3), dist: +cam.targetDist.toFixed(2),
+    seat: me.seat ? me.seat.i : null, view: viewMode === 'flat' ? 'flat:' + tvL.layout : viewMode, yaw: +cam.yaw.toFixed(3), pitch: +cam.pitch.toFixed(3), dist: +cam.targetDist.toFixed(2),
     sound: soundOn || soundWanted, t: Date.now(),
   });
 }
@@ -558,6 +722,7 @@ function restoreFrom(sn) {
     if (sn.view === 'best') setMode('best');
     else if (sn.view === 'full') enterFull();
   } else if (s) toast('原本的位子已經有人坐了');
+  if (typeof sn.view === 'string' && sn.view.startsWith('flat:')) { updateZone(); if (zoneWall) tvSet(sn.view.slice(5), true); }
   if (!me.seat && freeSpot(me.pos.x, me.pos.y, me.pos.z) === null) collide(me.pos);
   // 瀏覽器規定要有使用者互動才能開聲音：點一下畫面或按任意鍵就恢復
   if (sn.sound) {
@@ -667,6 +832,7 @@ function updateMe(dt) {
   if (keys.KeyW || keys.ArrowUp) iz -= 1; if (keys.KeyS || keys.ArrowDown) iz += 1;
   if (keys.KeyA || keys.ArrowLeft) ix -= 1; if (keys.KeyD || keys.ArrowRight) ix += 1;
   if (joy.active) { ix += joy.x; iz += joy.y; }
+  if (viewMode === 'flat') { me.speed = 0; return; } // 平面觀看模式：角色留在原地
   const il = Math.hypot(ix, iz);
   if (travel.channeling && (il > 0.05 || me.jumping || performance.now() - jumpQueued < 160)) travel.interrupt(); // 移動、跳躍會打斷回城／傳送
   if (me.seat) { if (il > 0.3 && (viewMode === 'seat' || viewMode === 'normal')) standUp(); else { me.speed = 0; jumpQueued = -1e9; return; } }
@@ -702,6 +868,7 @@ function updateMe(dt) {
 
 const fullPos = new THREE.Vector3(), bestPos = new THREE.Vector3();
 function updateCamera(dt) {
+  if (viewMode === 'flat') return;
   if (camera.fov !== targetFov) {
     camera.fov += (targetFov - camera.fov) * Math.min(1, dt * 8);
     if (Math.abs(camera.fov - targetFov) < 0.01) camera.fov = targetFov;
@@ -734,6 +901,10 @@ function updateCamera(dt) {
   let d = Math.max(cam.dist, 0.001);
   if (!fp) {
     for (const c of world.camBlock) { const t = rayBox(camTarget, dirV, d, c); if (t < d) d = Math.max(0.3, t - 0.25); }
+    if (zoneWall) for (let s = 0.5; s < d; s += 0.5) { // 圓弧城牆擋相機
+      const x = camTarget.x + dirV.x * s, y = camTarget.y + dirV.y * s, z = camTarget.z + dirV.z * s;
+      if ((world.rings || []).some((g) => { const dx = x - g.x, dz = z - g.z; return y < g.h + 2.6 && !(dx > 0 && Math.abs(dz) < g.L) && Math.abs(Math.hypot(dx, dz) - g.R) < 3.2; })) { d = Math.max(0.3, s - 0.35); break; }
+    }
   }
   camera.position.copy(camTarget).addScaledVector(dirV, fp ? 0 : d);
   // 室內天花板與地板限制
@@ -771,7 +942,7 @@ function updateVolume() {
   if (zoneWall) {
     // 觀影館內兩台都是全音量；在廣場上隨距離變小
     const tv = inTheater(x, z) ? 100 : Math.max(0, 40 - Math.hypot(x - THEATER.x1, z - 15) * 1.2);
-    for (const t of tScreens) t.setVolume(tv * userVol / 100);
+    tScreens.forEach((t, i) => t.setVolume(tvMute[i ? 'b' : 'a'] ? 0 : tv * userVol / 100));
     return;
   }
   let v;
@@ -823,8 +994,8 @@ function frame() {
     const ra = r.air ? r.a - 6 : r.sitting ? 0 : r.a;
     r.av.update(dt, r.sitting ? 0 : Math.max(Math.min(ra, 2.2), moved * 0.5), r.sitting, t, r.air);
   }
-  renderer.render(scene, camera);
-  screen.render(camera);
+  if (viewMode === 'flat') tvFrame(); // 平面排版：不畫 3D 場景，只排兩台螢幕
+  else { renderer.render(scene, camera); screen.render(camera); }
   for (const p of previews) {
     const w = p.c.clientWidth, h = p.c.clientHeight;
     if (w && (p.c.width !== Math.round(w * p.r.getPixelRatio()))) { p.r.setSize(w, h, false); p.cm.aspect = w / h; p.cm.updateProjectionMatrix(); }
@@ -855,4 +1026,4 @@ const jumpBtn = $('#btn-jump');
 jumpBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); jumpQueued = performance.now(); jumpBtn.classList.add('press'); });
 for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) jumpBtn.addEventListener(ev, () => jumpBtn.classList.remove('press'));
 jumpBtn.addEventListener('contextmenu', (e) => e.preventDefault());
-window.__hall = { tScreens, get zoneWall() { return zoneWall; }, setMode, seatView, travel, seatOcc, checkVersion, get media() { return mediaState; }, screen, dock, me, cam, camera, scene, world, remotes, toggleSit, collide, groundAt, freeSpot, chat, jump: () => { jumpQueued = performance.now(); }, get ws() { return ws; }, get viewMode() { return viewMode; }, enterFull, exitFull };
+window.__hall = { tvSet, get tvL() { return tvL; }, tScreens, get zoneWall() { return zoneWall; }, setMode, seatView, travel, seatOcc, checkVersion, get media() { return mediaState; }, screen, dock, me, cam, camera, scene, world, remotes, toggleSit, collide, groundAt, freeSpot, chat, jump: () => { jumpQueued = performance.now(); }, get ws() { return ws; }, get viewMode() { return viewMode; }, enterFull, exitFull };
