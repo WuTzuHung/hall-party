@@ -64,6 +64,8 @@ const defaults = {
   },
   countdown: null, // { at, id, start, live, title }
   lights: true, // 室內燈（管理員控制，所有人同步）
+  // 城牆區觀影館：兩台螢幕各自獨立的播放時鐘（同時視聽：A＝作品畫面、B＝實況）
+  theater: { a: null, b: null }, // { id, live, title, playing, startedAt, pausedAt, dur, seq, gain }
 };
 let state = structuredClone(defaults);
 try {
@@ -72,6 +74,8 @@ try {
   if (!Array.isArray(state.music.list)) state.music.list = [];
   if (state.mode !== 'match') state.mode = 'music';
   if (typeof state.lights !== 'boolean') state.lights = true;
+  if (!state.theater || typeof state.theater !== 'object') state.theater = { a: null, b: null };
+  for (const k of ['a', 'b']) if (!state.theater[k] || !state.theater[k].id) state.theater[k] = null;
   if (state.music.index >= state.music.list.length) state.music.index = state.music.list.length ? 0 : -1;
 } catch (_) { /* 第一次啟動 */ }
 if (state.mode === 'music' && state.music.list.length && state.music.index < 0) startTrack(0);
@@ -135,9 +139,15 @@ function currentMedia() {
   const t = curTrack(); if (!t) return null;
   return { kind: 'music', item: t, clock: state.music, live: !!t.live, seq: state.music.seq, id: t.id };
 }
+function publicTheaterCh(c) {
+  if (!c) return null;
+  return { id: c.id, live: !!c.live, title: c.title || '', playing: !!c.playing, position: c.live ? 0 : clockPos(c), seq: c.seq, gain: c.gain ?? 100, dur: c.dur || 0 };
+}
+function publicTheater() { return { a: publicTheaterCh(state.theater.a), b: publicTheaterCh(state.theater.b) }; }
 function publicMedia() {
   const m = state.music, t = curTrack(), cd = state.countdown;
   return {
+    theater: publicTheater(),
     mode: state.mode, serverTime: Date.now(),
     video: publicVideo(),
     music: {
@@ -157,6 +167,7 @@ function adminState() {
     music: { ...publicMedia().music, list: state.music.list.map(x => ({ id: x.id, title: x.title || '', live: !!x.live, dur: x.dur || 0 })) },
     countdown: state.countdown ? { ...state.countdown } : null,
     lights: state.lights,
+    theater: publicTheater(),
   };
 }
 function broadcastMedia() { broadcast({ t: 'media', m: publicMedia() }); }
@@ -352,7 +363,48 @@ const server = http.createServer(async (req, res) => {
       broadcast({ t: 'lights', on: state.lights });
       return json(res, 200, adminState());
     }
-    if (p === '/api/admin/video') {
+    if (p === '/api/admin/theater') {
+      // 觀影館兩台螢幕：screen 'a' | 'b' | 'both'
+      // action：set（設定網址並開始播放；both 時用 urlA／urlB 同時開始）、play、pause、restart、seek、skip、clear、gain
+      const keys = body.screen === 'both' ? ['a', 'b'] : body.screen === 'a' || body.screen === 'b' ? [body.screen] : null;
+      if (!keys) return json(res, 400, { error: 'screen 必須是 a、b 或 both' });
+      const T = state.theater, now = Date.now();
+      if (body.action === 'set') {
+        const items = [];
+        for (const k of keys) {
+          const url = keys.length > 1 ? body['url' + k.toUpperCase()] : body.url;
+          if (keys.length > 1 && !url) continue; // 同時開始時可以只換其中一台
+          const parsed = parseYouTube(url);
+          if (!parsed) return json(res, 400, { error: `螢幕 ${k.toUpperCase()}：無法辨識的 YouTube 網址` });
+          items.push([k, parsed]);
+        }
+        if (!items.length) return json(res, 400, { error: '請提供網址' });
+        for (const [k, parsed] of items) {
+          const live = !!((keys.length > 1 ? body['live' + k.toUpperCase()] : body.live) ?? parsed.live);
+          const start = Number((keys.length > 1 ? body['start' + k.toUpperCase()] : body.start) ?? parsed.start) || 0;
+          const title = cleanText(keys.length > 1 ? body['title' + k.toUpperCase()] : body.title, 120);
+          const gain = T[k]?.gain ?? 100;
+          T[k] = { id: parsed.id, live, title, playing: true, startedAt: now - start * 1000, pausedAt: start, dur: 0, seq: ++state.seq, gain };
+        }
+      } else {
+        for (const k of keys) {
+          const c = T[k];
+          if (body.action === 'clear') { T[k] = null; continue; }
+          if (!c) { if (keys.length > 1) continue; return json(res, 400, { error: `螢幕 ${k.toUpperCase()} 還沒有設定影片` }); }
+          const pos = clockPos(c);
+          switch (body.action) {
+            // 同時開始／暫停時用同一個時間點，兩台的進度才會一致
+            case 'play': if (!c.playing) { c.playing = true; c.startedAt = now - c.pausedAt * 1000; } break;
+            case 'pause': if (c.playing) { c.playing = false; c.pausedAt = pos; } break;
+            case 'restart': clockSet(c, 0); break;
+            case 'seek': clockSet(c, Number(body.seconds) || 0); break;
+            case 'skip': clockSet(c, pos + (Number(body.seconds) || 0)); break;
+            case 'gain': { const g = Math.round(Number(body.gain)); if (!(g >= 0 && g <= 100)) return json(res, 400, { error: '音量需為 0–100' }); c.gain = g; break; }
+            default: return json(res, 400, { error: 'unknown action' });
+          }
+        }
+      }
+    } else if (p === '/api/admin/video') {
       // 開始比賽：自動切到比賽模式，大廳音樂停止
       const parsed = parseYouTube(body.url);
       if (!parsed) return json(res, 400, { error: '無法辨識的 YouTube 網址' });
@@ -559,6 +611,20 @@ wss.on('connection', (ws) => {
 // 播放回報：用戶端的 YouTube 播放器回報片長（dur）、播完（ended）、無法播放（err）
 // 以 seq 判斷是不是「目前這一次播放」，過時或重複的回報一律忽略
 function onMediaReport(m) {
+  // 觀影館：記錄片長；播完就停在片尾（不自動換片）
+  for (const k of ['a', 'b']) {
+    const c = state.theater[k];
+    if (!c || c.live || Number(m.seq) !== c.seq || (m.id && m.id !== c.id)) continue;
+    if (m.t === 'dur') {
+      const s = Number(m.seconds);
+      if (!c.dur && Number.isFinite(s) && s >= 5 && s <= 12 * 3600) { c.dur = Math.round(s * 10) / 10; save(); }
+      if (!c.title && m.title) { const t = cleanText(m.title, 120); if (t) { c.title = t; save(); } }
+    } else if (m.t === 'ended' && c.playing) {
+      const pos = clockPos(c);
+      if (c.dur ? pos >= c.dur - 10 : pos >= 3) { c.playing = false; c.pausedAt = c.dur || pos; save(); broadcastMedia(); }
+    }
+    return;
+  }
   const cur = currentMedia();
   if (!cur || cur.live || Number(m.seq) !== cur.seq || (m.id && m.id !== cur.id)) return;
   const it = cur.item, pos = clockPos(cur.clock);
@@ -603,6 +669,10 @@ setInterval(() => {
     startMatch({ id: cd.id, start: cd.start || 0, live: cd.live, title: cd.title });
     console.log(`[media] countdown reached -> match ${cd.id}`);
     save(); broadcastMedia();
+  }
+  for (const k of ['a', 'b']) {
+    const c = state.theater[k];
+    if (c && !c.live && c.playing && c.dur && clockPos(c) >= c.dur + 1.5) { c.playing = false; c.pausedAt = c.dur; save(); broadcastMedia(); }
   }
   const cur = currentMedia();
   if (cur && !cur.live && cur.clock.playing) {

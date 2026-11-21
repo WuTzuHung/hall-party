@@ -9,10 +9,10 @@ function fixture() {
   const calls = [], timers = [];
   const sandbox = { performance, setTimeout: fn => timers.push(fn), window: {}, location: { origin: 'http://localhost' } };
   const source = fs.readFileSync(path.join(__dirname, '../public/js/screen.js'), 'utf8')
-    .replace(/^import .*;\r?\n/gm, '').replace('export class BigScreen', 'globalThis.BigScreen = class BigScreen');
+    .replace(/^import .*;\r?\n/gm, '').replace('export class ScreenLayer', 'class ScreenLayer').replace('export class BigScreen', 'globalThis.BigScreen = class BigScreen');
   vm.runInNewContext(source, sandbox);
   const s = Object.create(sandbox.BigScreen.prototype);
-  Object.assign(s, { player: null, ready: false, state: null, muted: true, volume: 70, fade: 1, reported: {}, updateOverlay() {}, transition() {} });
+  Object.assign(s, { active: true, cfg: { elId: 'yt-player' }, player: null, ready: false, state: null, muted: true, volume: 70, fade: 1, reported: {}, updateOverlay() {}, transition() {} });
   const p = { getIframe: () => ({ style: {} }), getVideoData: () => ({ video_id: s.state.id }),
     mute() { calls.push('mute'); p.muted = true; }, unMute() { calls.push('unMute'); p.muted = false; },
     isMuted: () => p.muted, getPlayerState: () => p.state, setVolume: v => calls.push(['volume', v]),

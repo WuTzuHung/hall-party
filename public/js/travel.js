@@ -1,6 +1,6 @@
 // 傳送與回城：左上角半透明小地圖、引導讀條、地面法陣與光柱特效（原創美術；操作手感參考 MOBA 的回城／傳送）
 // - 回城（B / 手機「回城」）：原地引導 4 秒，移動、跳躍、坐下都會打斷；完成後回到大門口（家）
-// - 傳送（F / 點小地圖上的傳送點 / 數字鍵 1–5）：引導 3 秒，目的地同時亮起信標；完成後冷卻 15 秒
+// - 傳送（F / 點小地圖上的傳送點 / 數字鍵 1–9）：引導 3 秒，目的地同時亮起信標；完成後冷卻 15 秒
 // - 其他玩家看得到：開始／取消／完成都會透過伺服器轉播（t: 'fx'）
 import * as THREE from 'three';
 
@@ -11,7 +11,14 @@ export const POINTS = [
   { key: 'front', name: '螢幕前', x: 0, y: 0, z: -45.4 },
   { key: 'west', name: '二樓左側', x: -8.9, y: 7, z: -42.5 },
   { key: 'east', name: '二樓右側', x: 8.9, y: 7, z: -42.5 },
+  // 城牆區
+  { key: 'gate', name: '城門內', x: -77.5, y: 0.17, z: 15, area: 'wall' },
+  { key: 'square', name: '城內廣場', x: -90, y: 0.17, z: 15, area: 'wall' },
+  { key: 'theater', name: '觀影館', x: -110.5, y: 0.15, z: 15, area: 'wall' },
+  { key: 'tfront', name: '雙螢幕前', x: -131, y: 0.15, z: 15, area: 'wall' },
 ];
+for (const p of POINTS) p.area ||= 'hall';
+export const areaOf = (x) => (x < -69 ? 'wall' : 'hall');
 export const RECALL_T = 4.0, TP_T = 3.0, TP_CD = 15, TP_CANCEL_CD = 4;
 const destOf = (d) => (d === -1 ? HOME : POINTS[d]);
 
@@ -221,7 +228,48 @@ class BurstFX {
 }
 
 // ---------- 小地圖 ----------
+// 兩張平面圖共用同樣比例的畫布（31.2 : 67.8）：殿堂（螢幕在上）、城牆區（轉 90°，雙螢幕在上、城門在下）
 const MAP = { x0: -15.6, x1: 15.6, z0: -59.4, z1: 8.4 };
+const WMAP = { z0: -8.6, z1: 38.6, x0: -140.6 }; // 寬 47.2m（z），高 47.2 / 31.2 * 67.8 ≈ 102.6m（x）
+const PROJ = {
+  hall: { span: MAP.x1 - MAP.x0, f: (x, z, s) => [(x - MAP.x0) * s, (z - MAP.z0) * s] },
+  wall: { span: WMAP.z1 - WMAP.z0, f: (x, z, s) => [(WMAP.z1 - z) * s, (x - WMAP.x0) * s] },
+};
+function drawWall(g, s) {
+  const P = (x, z) => PROJ.wall.f(x, z, s);
+  const rect = (x0, z0, x1, z1) => { const [a, b] = P(x0, z1), [c, d] = P(x1, z0); g.rect(Math.min(a, c), Math.min(b, d), Math.abs(c - a), Math.abs(d - b)); };
+  const fillR = (x0, z0, x1, z1, c) => { g.fillStyle = c; g.beginPath(); rect(x0, z0, x1, z1); g.fill(); };
+  const strokeR = (x0, z0, x1, z1, c, w = 1) => { g.strokeStyle = c; g.lineWidth = w; g.beginPath(); rect(x0, z0, x1, z1); g.stroke(); };
+  const gold = 'rgba(224,189,106,', ink = 'rgba(245,238,221,', stone = 'rgba(170,176,168,';
+  // 街道（城牆外）
+  fillR(-66, 0, -38, 30, ink + '0.05)'); fillR(-66, 8, -38, 22, 'rgba(20,20,26,0.35)');
+  // 廣場卵石
+  fillR(-100, -4, -72, 34, stone + '0.12)');
+  fillR(-100, 13.2, -72, 16.8, stone + '0.16)');
+  // 民居
+  for (const [x0, x1] of [[-79.2, -72], [-85.6, -79.2], [-93.2, -85.6], [-100, -93.2]]) { fillR(x0, -13, x1, -4, 'rgba(10,8,14,0.6)'); strokeR(x0, -13, x1, -4, stone + '0.3)', 0.7); }
+  for (const [x0, x1] of [[-78.4, -72], [-86, -78.4], [-92.6, -86], [-100, -92.6]]) { fillR(x0, 34, x1, 43, 'rgba(10,8,14,0.6)'); strokeR(x0, 34, x1, 43, stone + '0.3)', 0.7); }
+  // 城牆與城門
+  fillR(-72, -9, -66, 10.5, stone + '0.55)'); fillR(-72, 19.5, -66, 39, stone + '0.55)');
+  fillR(-66, 5, -62, 10.5, stone + '0.5)'); fillR(-66, 19.5, -62, 25, stone + '0.5)');
+  // 水井、街燈
+  g.fillStyle = stone + '0.5)'; { const [a, b] = P(-84, 4.2); g.beginPath(); g.arc(a, b, 1.3 * s, 0, Math.PI * 2); g.fill(); }
+  // 觀影館
+  fillR(-136, 2, -100, 28, 'rgba(10,6,16,0.6)');
+  const fl = g.createLinearGradient(0, P(-134.8, 0)[1], 0, P(-101.2, 0)[1]); fl.addColorStop(0, 'rgba(120,150,110,0.28)'); fl.addColorStop(1, 'rgba(110,90,60,0.22)');
+  g.fillStyle = fl; g.beginPath(); rect(-134.8, 3.2, -101.2, 26.8); g.fill();
+  for (const z of [2, 28]) { g.fillStyle = stone + '0.5)'; const [a, b] = P(-100, z); g.beginPath(); g.arc(a, b, 2.9 * s, 0, Math.PI * 2); g.fill(); }
+  // 長椅與餐桌
+  for (const x of [-129.2, -127.6, -126.0, -124.4, -122.8, -121.2, -119.6]) for (const [z0, z1] of [[4.2, 13.8], [16.2, 25.8]]) fillR(x - 0.22, z0, x + 0.3, z1, gold + '0.4)');
+  for (const z of [10.4, 19.6]) fillR(-116.4, z - 0.55, -104.2, z + 0.55, ink + '0.3)');
+  // 壁爐
+  fillR(-119.7, 3.2, -115.3, 4.7, 'rgba(255,140,60,0.5)');
+  // 兩台螢幕
+  g.save(); g.shadowColor = 'rgba(160,190,255,0.9)'; g.shadowBlur = 6 * (s / 4); g.fillStyle = 'rgba(210,225,255,0.95)';
+  for (const z of [9.6, 20.4]) { g.beginPath(); rect(-134.8, z - 4.8, -134.2, z + 4.8); g.fill(); }
+  g.restore();
+  g.strokeStyle = gold + '0.55)'; g.lineWidth = 1.2; g.beginPath(); rect(-134.8, 3.2, -101.2, 26.8); g.stroke();
+}
 const PIER_Z = [-11, -18, -25, -32, -39, -46, -53];
 function drawStatic(g, s) {
   const X = (x) => (x - MAP.x0) * s, Z = (z) => (z - MAP.z0) * s;
@@ -319,7 +367,7 @@ export function initTravel({ scene, hud, isTouch, toast, send, me, getAvatar, pl
   const mm = el('div', 'hidden'); mm.id = 'minimap';
   const cv = el('canvas'); cv.setAttribute('aria-label', '小地圖：點傳送點即可傳送');
   const head = el('div', 'mm-head', '<span class="mm-t">MAP</span><span class="mm-sub">殿堂平面</span>');
-  const pickHint = el('div', 'mm-pick', `選擇傳送地點<small>${isTouch ? '點空白處取消' : '點傳送點或按 1–5 · Esc 取消'}</small>`);
+  const pickHint = el('div', 'mm-pick', `選擇傳送地點<small>${isTouch ? '點空白處取消' : '點傳送點或按 1–9 · Esc 取消'}</small>`);
   mm.append(head, cv, pickHint);
   const legend = el('div', 'mm-names'); mm.append(legend);
   const btns = el('div', 'hidden'); btns.id = 'travel-btns';
@@ -443,27 +491,39 @@ export function initTravel({ scene, hud, isTouch, toast, send, me, getAvatar, pl
     const r = cv.getBoundingClientRect();
     if (!r.width) return false;
     dpr = Math.min(2.5, devicePixelRatio || 1);
-    W = r.width; H = r.height; S = W / (MAP.x1 - MAP.x0);
+    W = r.width; H = r.height; S = W / PROJ[view].span;
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
     bg = document.createElement('canvas'); bg.width = cv.width; bg.height = cv.height;
-    const g = bg.getContext('2d'); g.scale(dpr, dpr); drawStatic(g, S);
+    const g = bg.getContext('2d'); g.scale(dpr, dpr); (view === 'wall' ? drawWall : drawStatic)(g, S);
+    head.querySelector('.mm-sub').textContent = view === 'wall' ? '城牆區' : '殿堂平面';
     layoutNames();
     return true;
   }
-  const MX = (x) => (x - MAP.x0) * S, MZ = (z) => (z - MAP.z0) * S;
+  // 目前顯示哪一張地圖：跟著自己所在的區域；點標題可以切換看另一區（換區時自動回到所在區）
+  let view = 'hall', viewArea = 'hall', manual = false;
+  const PX = (x, z) => PROJ[view].f(x, z, S);
+  const MX = (x, z = 0) => PX(x, z)[0], MZ = (z, x = 0) => PX(x, z)[1];
+  const vis = (p) => (p.area || 'hall') === view;
+  const mapAngle = (dx, dz) => { const [a, b] = PX(0, 0), [c, d] = PX(dx, dz); return Math.atan2(d - b, c - a); };
+  head.style.cursor = 'pointer'; head.title = '切換殿堂／城牆區地圖';
+  head.addEventListener('click', (e) => { e.stopPropagation(); manual = true; view = view === 'hall' ? 'wall' : 'hall'; bg = null; });
   // 傳送點名稱（DOM 文字，放大選擇時顯示）
   function layoutNames() {
     legend.innerHTML = '';
     if (!W) return;
-    const all = [...POINTS.map((p, i) => ({ ...p, i })), { ...HOME, i: -1 }];
+    const all = [...POINTS.map((p, i) => ({ ...p, i })), { ...HOME, i: -1 }].filter(vis);
     for (const p of all) {
       const n = el('span', 'mm-name' + (p.i < 0 ? ' home' : ''), (p.i >= 0 && !isTouch ? `<b>${p.i + 1}</b>` : '') + p.name);
-      n.style.left = (MX(p.x) / W * 100) + '%'; n.style.top = (MZ(p.z) / H * 100) + '%';
+      const [px, py] = PX(p.x, p.z);
+      n.style.left = (px / W * 100) + '%'; n.style.top = (py / H * 100) + '%';
       n.dataset.side = p.key === 'front' ? 'ru' : p.key === 'west' ? 'rd' : 'r'; n.dataset.i = p.i; // 標籤一律往右，靠近的幾個上下錯開
       legend.append(n);
     }
   }
   function draw(t) {
+    const here = areaOf(me.pos.x);
+    if (here !== viewArea) { viewArea = here; manual = false; }
+    if (!manual && view !== here) { view = here; bg = null; }
     if (cv.clientWidth && Math.abs(cv.clientWidth - W) > 0.5) bg = null; // 選擇模式放大縮小時重畫底圖（不用 CSS 縮放，避免模糊）
     if (!bg && !resize()) return;
     const g = cv.getContext('2d');
@@ -473,35 +533,38 @@ export function initTravel({ scene, hud, isTouch, toast, send, me, getAvatar, pl
     const r0 = picking ? 5.2 : 4.4;
     // 引導中的目的地：光環
     const pend = ch && ch.kind === 'tp' ? POINTS[ch.d] : null;
-    if (pend) {
+    if (pend && vis(pend)) {
       const k = ch.t / ch.dur; g.strokeStyle = `rgba(143,240,255,${0.5 + 0.5 * Math.sin(t * 10)})`; g.lineWidth = 1.5;
-      g.beginPath(); g.arc(MX(pend.x), MZ(pend.z), r0 + 3 + 6 * (1 - k), 0, Math.PI * 2); g.stroke();
+      g.beginPath(); g.arc(...PX(pend.x, pend.z), r0 + 3 + 6 * (1 - k), 0, Math.PI * 2); g.stroke();
     }
     // 其他玩家正在傳送的目的地
-    for (const r of remote.values()) if (r.ch && r.ch.kind === 'tp' && POINTS[r.ch.d]) {
+    for (const r of remote.values()) if (r.ch && r.ch.kind === 'tp' && POINTS[r.ch.d] && vis(POINTS[r.ch.d])) {
       const p = POINTS[r.ch.d]; g.strokeStyle = `rgba(184,151,255,${0.35 + 0.3 * Math.sin(t * 8)})`; g.lineWidth = 1;
-      g.beginPath(); g.arc(MX(p.x), MZ(p.z), r0 + 4, 0, Math.PI * 2); g.stroke();
+      g.beginPath(); g.arc(...PX(p.x, p.z), r0 + 4, 0, Math.PI * 2); g.stroke();
     }
-    drawHome(g, MX(HOME.x), MZ(HOME.z), r0);
-    POINTS.forEach((p, i) => drawWaypoint(g, MX(p.x), MZ(p.z), r0, picking && !cd, cd, t + i * 0.4));
+    if (vis(HOME)) drawHome(g, ...PX(HOME.x, HOME.z), r0);
+    POINTS.forEach((p, i) => { if (vis(p)) drawWaypoint(g, ...PX(p.x, p.z), r0, picking && !cd, cd, t + i * 0.4); });
     // 其他玩家
     for (const [id, av] of avatarsIter()) {
-      const p = av.root.position; const col = av.color === 'blue' ? '146,198,255' : '255,169,198';
+      const p = av.root.position; if (areaOf(p.x) !== view) continue;
+      const col = av.color === 'blue' ? '146,198,255' : '255,169,198';
       const up = p.y > 4.5; // 二樓的人加一圈白邊
-      g.fillStyle = `rgba(${col},0.95)`; g.beginPath(); g.arc(MX(p.x), MZ(p.z), up ? 2.4 : 2.2, 0, Math.PI * 2); g.fill();
+      const [ax, ay] = PX(p.x, p.z);
+      g.fillStyle = `rgba(${col},0.95)`; g.beginPath(); g.arc(ax, ay, up ? 2.4 : 2.2, 0, Math.PI * 2); g.fill();
       if (up) { g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 0.8; g.stroke(); }
       const rr = remote.get(id);
-      if (rr && rr.ch) { g.strokeStyle = rr.ch.kind === 'tp' ? 'rgba(184,151,255,0.9)' : 'rgba(255,217,138,0.9)'; g.lineWidth = 1; g.beginPath(); g.arc(MX(p.x), MZ(p.z), 4 + 2 * Math.sin(t * 8), 0, Math.PI * 2); g.stroke(); }
+      if (rr && rr.ch) { g.strokeStyle = rr.ch.kind === 'tp' ? 'rgba(184,151,255,0.9)' : 'rgba(255,217,138,0.9)'; g.lineWidth = 1; g.beginPath(); g.arc(ax, ay, 4 + 2 * Math.sin(t * 8), 0, Math.PI * 2); g.stroke(); }
     }
+    if (areaOf(me.pos.x) !== view) return; // 在看另一區的地圖時不畫自己
     // 自己：視野扇形 + 箭頭
-    const x = MX(me.pos.x), y = MZ(me.pos.z);
+    const [x, y] = PX(me.pos.x, me.pos.z);
     const yaw = viewYaw();
-    const fwd = Math.atan2(-Math.cos(yaw), -Math.sin(yaw)); // 地圖上的視線方向（相機面向 -dirV）
+    const fwd = mapAngle(-Math.sin(yaw), -Math.cos(yaw)); // 地圖上的視線方向（相機面向 -dirV）
     const fan = g.createRadialGradient(x, y, 0, x, y, 26);
     fan.addColorStop(0, 'rgba(255,240,200,0.32)'); fan.addColorStop(1, 'rgba(255,240,200,0)');
     g.fillStyle = fan; g.beginPath(); g.moveTo(x, y); g.arc(x, y, 26, fwd - 0.55, fwd + 0.55); g.closePath(); g.fill();
     if (ch) { g.strokeStyle = ch.kind === 'tp' ? 'rgba(143,240,255,0.95)' : 'rgba(255,217,138,0.95)'; g.lineWidth = 1.4; g.beginPath(); g.arc(x, y, 5.5 + 2 * Math.sin(t * 9), 0, Math.PI * 2); g.stroke(); }
-    const a = Math.atan2(Math.cos(me.ry), Math.sin(me.ry)); // 角色面向（ry：atan2(wx, wz)）
+    const a = mapAngle(Math.sin(me.ry), Math.cos(me.ry)); // 角色面向（ry：atan2(wx, wz)）
     g.save(); g.translate(x, y); g.rotate(a);
     g.shadowColor = 'rgba(0,0,0,0.6)'; g.shadowBlur = 3;
     g.fillStyle = me.color === 'blue' ? '#bfe0ff' : '#ffd0e0'; g.strokeStyle = '#fff6dc'; g.lineWidth = 1.2;
@@ -516,8 +579,8 @@ export function initTravel({ scene, hud, isTouch, toast, send, me, getAvatar, pl
     const r = cv.getBoundingClientRect();
     const px = (e.clientX - r.left) * (W / r.width), py = (e.clientY - r.top) * (H / r.height);
     let best = null, bd = isTouch ? 16 : 11; // 螢幕像素
-    const all = [...POINTS.map((p, i) => [p, i]), [HOME, -1]];
-    for (const [p, i] of all) { const d = Math.hypot(MX(p.x) - px, MZ(p.z) - py) * (r.width / W); if (d < bd) { bd = d; best = i; } }
+    const all = [...POINTS.map((p, i) => [p, i]), [HOME, -1]].filter(([p]) => vis(p));
+    for (const [p, i] of all) { const [qx, qy] = PX(p.x, p.z); const d = Math.hypot(qx - px, qy - py) * (r.width / W); if (d < bd) { bd = d; best = i; } }
     return best;
   }
   mm.addEventListener('pointerdown', (e) => { e.stopPropagation(); });

@@ -691,3 +691,6 @@ export function radial(inner = 'rgba(0,0,0,0.55)', outer = 'rgba(0,0,0,0)') {
 
 // 欄杆柱（瓶形）側影 alpha
 export function noiseNormalLike() { return null; }
+
+// 給其他貼圖模組共用的工具
+export { fbm, tnoise, canvas, pixelFill, setSeed };

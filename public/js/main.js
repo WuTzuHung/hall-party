@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildWorld, SPAWN, HALL, SCREEN } from './world.js';
 import { Avatar } from './avatar.js';
-import { BigScreen } from './screen.js';
+import { BigScreen, ScreenLayer } from './screen.js';
+import { TSCREENS, TFOCUS, THEATER, inTheater } from './district.js';
 import { initChat } from './chat.js';
 import { initAdminDock } from './admin-dock.js';
 import { initTravel } from './travel.js';
@@ -35,8 +36,28 @@ try {
 } catch (e) { console.error(e); status('場景載入失敗：' + e.message); throw e; }
 scene.traverse((o) => { if (o.material && o.material.isMeshStandardMaterial) o.material.envMapIntensity = (o.material.envMapIntensity ?? 1) * 0.35; });
 
-const screen = new BigScreen(scene, $('#stage'));
-screen.setSize(innerWidth, innerHeight);
+const layer = new ScreenLayer($('#stage'));
+const screen = new BigScreen(scene, layer); // 殿堂大螢幕
+// 城牆觀影館的兩台螢幕（同時視聽）：A＝作品畫面、B＝實況
+const tIdle = (n, sub) => `<div style="width:640px;height:2px;background:linear-gradient(90deg,transparent,#b8954a,transparent);margin-bottom:40px"></div><div style="font-size:46px;letter-spacing:22px;padding-left:22px;color:#b8954a">MAUERHALLE</div><div style="margin-top:10px;font-size:260px;line-height:1;font-weight:600;letter-spacing:30px;padding-left:30px;color:#e8dcbc;text-shadow:0 5px 0 rgba(0,0,0,.45)">${n}</div><div style="margin-top:18px;font-size:34px;letter-spacing:14px;padding-left:14px;color:#9d8b66">${sub}</div><div style="width:640px;height:2px;background:linear-gradient(90deg,transparent,#b8954a,transparent);margin-top:40px"></div>`;
+const tScreens = TSCREENS.map((c, i) => {
+  const sc = new BigScreen(scene, layer, { ...c, elId: 'yt-theater-' + c.key, idleHTML: tIdle(i ? 'II' : 'I', 'AWAITING SIGNAL') });
+  sc.el.idle.style.background = 'radial-gradient(ellipse at 50% 40%,#2a3528,#080a08 72%)';
+  sc.setActive(false); return sc;
+});
+const allScreens = [screen, ...tScreens];
+const anySound = () => allScreens.some((x) => x.isSoundOn());
+let zoneWall = false; // 玩家在城牆區：只播觀影館兩台；否則只播殿堂大螢幕
+function updateZone() {
+  const x = me.pos.x, w = zoneWall ? x < -68.5 : x < -69.5;
+  if (w === zoneWall) return;
+  zoneWall = w;
+  screen.setActive(!w); for (const t of tScreens) t.setActive(w);
+  updateVolume(); updateSoundButton();
+}
+// 目前要看的螢幕（坐下視角、最佳視角、全螢幕用）：{ x, y, z, w, h, ry }，ry 為螢幕面向（0 = 朝 +z）
+const focusScreen = () => (zoneWall ? { ...TFOCUS, ry: Math.PI / 2 } : { x: SCREEN.x, y: SCREEN.y, z: SCREEN.z, w: SCREEN.w, h: SCREEN.h, ry: 0 });
+layer.setSize(innerWidth, innerHeight);
 
 // ---------- 玩家 ----------
 const me = {
@@ -112,10 +133,10 @@ addEventListener('keydown', (e) => {
     e.preventDefault(); clearKeys(); chat.open(); return;
   }
   keys[e.code] = true;
-  // 回城（B）、傳送（F 開啟小地圖選點，1–5 直接選）、Esc 取消選點
+  // 回城（B）、傳送（F 開啟小地圖選點，1–9 直接選）、Esc 取消選點
   if (e.code === 'KeyB' && !e.repeat) { travel.recall(); return; }
   if (e.code === 'KeyF' && !e.repeat) { travel.togglePick(); return; }
-  if (travel.picking && /^(Digit|Numpad)[1-5]$/.test(e.code)) { travel.teleport(Number(e.code.slice(-1)) - 1); return; }
+  if (travel.picking && /^(Digit|Numpad)[1-9]$/.test(e.code)) { travel.teleport(Number(e.code.slice(-1)) - 1); return; }
   if (e.code === 'Escape' && travel.picking) { travel.setPick(false); return; }
   if (e.code === 'KeyE' && !e.repeat) toggleSit();
   if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) jumpQueued = performance.now(); }
@@ -201,7 +222,7 @@ canvas.addEventListener('pointerup', endPointer); canvas.addEventListener('point
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
   const f = Math.exp(e.deltaY * 0.0012);
-  if (viewMode === 'best') { bestD = THREE.MathUtils.clamp(bestD * f, 6, 42); return; }
+  if (viewMode === 'best') { bestD = THREE.MathUtils.clamp(bestD * f, 6, zoneWall ? 30 : 42); return; }
   if (viewMode === 'full') return;
   if (zoomSeat(f)) return;
   cam.targetDist = cam.targetDist < 0.3 && e.deltaY > 0 ? 0.8 : THREE.MathUtils.clamp(cam.targetDist * f, cam.minD, cam.maxD);
@@ -269,7 +290,8 @@ $('#btn-sit').addEventListener('click', (e) => { e.stopPropagation(); toggleSit(
 // 坐下時：第一人稱，從座位的眼睛高度看向大螢幕中央
 function seatView() {
   const ex = me.pos.x, ey = me.pos.y + 1.25, ez = me.pos.z;
-  const lx = SCREEN.x - ex, ly = SCREEN.y - ey, lz = SCREEN.z - ez; const l = Math.hypot(lx, ly, lz);
+  updateZone(); const F = focusScreen();
+  const lx = F.x - ex, ly = F.y - ey, lz = F.z - ez; const l = Math.hypot(lx, ly, lz);
   cam.pitch = Math.asin(-ly / l); cam.yaw = Math.atan2(-lx, -lz);
   cam.dist = cam.targetDist = 0;
 }
@@ -319,14 +341,14 @@ $('#vol').addEventListener('input', (e) => { userVol = Number(e.target.value); s
 $('#vol').addEventListener('change', (e) => e.target.blur()); // 放開後把焦點還給場景，方向鍵才不會去動拉桿
 showVol();
 function updateSoundButton() {
-  const active = screen.isSoundOn(), btn = $('#btn-sound');
+  const active = anySound(), btn = $('#btn-sound');
   $('#vol-pill').classList.toggle('hidden', !soundOn);
   btn.textContent = active ? (innerWidth <= 560 ? '🔊' : '🔊 聲音開啟') : soundOn ? '🔇 點一下開啟聲音' : '🔇 開啟聲音';
   btn.setAttribute('aria-pressed', String(active));
 }
-screen.onSoundChange = updateSoundButton;
-function setSound(on) { soundOn = on; if (on) updateVolume(); screen.setSound(on); updateSoundButton(); }
-$('#btn-sound').addEventListener('click', () => setSound(!screen.isSoundOn()));
+for (const x of allScreens) x.onSoundChange = updateSoundButton;
+function setSound(on) { soundOn = on; if (on) updateVolume(); for (const x of allScreens) x.setSound(on); updateSoundButton(); }
+$('#btn-sound').addEventListener('click', () => setSound(!anySound()));
 $('#btn-help').addEventListener('click', () => { unlockPointer(); $('#help').classList.remove('hidden'); });
 document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => $('#' + b.dataset.close).classList.add('hidden')));
 $('#btn-full').addEventListener('click', () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.(); });
@@ -457,7 +479,7 @@ function connect() {
         if (me.seat && me.seat.i === Number(m.seat)) { standUp(); toast('這個位子有人坐了'); }
         break;
       case 'kicked': onKicked(m.reason); break;
-      case 'pong': { const rtt = performance.now() - m.c; serverOffset = m.s + rtt / 2 - Date.now(); screen.setServerOffset(serverOffset); break; }
+      case 'pong': { const rtt = performance.now() - m.c; serverOffset = m.s + rtt / 2 - Date.now(); for (const x of allScreens) x.setServerOffset(serverOffset); break; }
     }
   };
   ws.onclose = () => {
@@ -480,6 +502,7 @@ function onKicked(reason) {
 $('#btn-kicked').addEventListener('click', () => location.reload());
 function onMedia(m) {
   mediaState = m; screen.setMedia(m); dock.setMedia(m);
+  const th = m.theater || {}; tScreens[0].setChannel(th.a || null); tScreens[1].setChannel(th.b || null);
 }
 // 室內燈（管理員控制，伺服器同步）：記住最新值；world.setLights 由 world.js 提供（還沒有時先略過，之後 applyLights() 會補上）
 let lightsOn = true;
@@ -490,7 +513,7 @@ function applyLights(on) {
   dock?.setLights?.(lightsOn);
 }
 // 播放器回報（片長、播完、無法播放），讓伺服器決定何時換下一首／比賽結束回到音樂
-screen.onReport = (msg) => wsSend(msg);
+for (const x of allScreens) x.onReport = (msg) => wsSend(msg);
 
 function onWelcome(m) {
   const firstEntry = !entered;
@@ -539,7 +562,7 @@ function restoreFrom(sn) {
   // 瀏覽器規定要有使用者互動才能開聲音：點一下畫面或按任意鍵就恢復
   if (sn.sound) {
     soundWanted = true; toast('歡迎回來 · 點一下畫面即可恢復聲音', 4500);
-    const on = (e) => { soundWanted = false; if (!screen.isSoundOn() && !kicked && !(e.target.closest && e.target.closest('#btn-sound'))) setSound(true); removeEventListener('click', on, true); removeEventListener('keydown', on, true); };
+    const on = (e) => { soundWanted = false; if (!anySound() && !kicked && !(e.target.closest && e.target.closest('#btn-sound'))) setSound(true); removeEventListener('click', on, true); removeEventListener('keydown', on, true); };
     // Android 的 pointerdown 尚未完成點擊手勢；使用 click 才能確實解鎖媒體。
     addEventListener('click', on, true); addEventListener('keydown', on, true);
   } else toast('歡迎回來', 2500);
@@ -685,15 +708,15 @@ function updateCamera(dt) {
     camera.updateProjectionMatrix();
   }
   if (viewMode === 'best' || viewMode === 'full') {
-    let d;
+    let d; const F = focusScreen();
     if (viewMode === 'full') {
       const t = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-      d = Math.max((SCREEN.h / 2) / t, (SCREEN.w / 2) / (t * camera.aspect)) * 1.0;
-    } else d = bestD;
-    const target = (viewMode === 'full' ? fullPos : bestPos).set(SCREEN.x, SCREEN.y, SCREEN.z + d);
+      d = Math.max((F.h / 2) / t, (F.w / 2) / (t * camera.aspect)) * 1.0;
+    } else d = zoneWall ? Math.min(bestD, 30) : bestD;
+    const target = (viewMode === 'full' ? fullPos : bestPos).set(F.x + Math.sin(F.ry) * d, F.y, F.z + Math.cos(F.ry) * d);
     const k = viewMode === 'full' ? 1 : Math.min(1, dt * 6);
     camera.position.lerp(target, k);
-    camera.quaternion.slerp(new THREE.Quaternion(), k); // 正對 -z，完全水平
+    camera.quaternion.slerp(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), F.ry), k); // 正對螢幕，完全水平
     const hide = viewMode === 'full';
     if (me.avatar) me.avatar.root.visible = !hide && camera.position.distanceTo(me.avatar.root.position) > 1.2;
     for (const r of remotes.values()) r.av.root.visible = !hide;
@@ -721,6 +744,13 @@ function updateCamera(dt) {
     camera.position.x = THREE.MathUtils.clamp(camera.position.x, -13.7, 13.7);
     camera.position.z = Math.max(camera.position.z, -57.6);
   }
+  // 觀影館內：相機不穿出牆面與屋頂
+  if (inTheater(me.pos.x, me.pos.z)) {
+    const T_ = THEATER, I0 = T_.x0 + T_.t + 0.3, I1 = T_.x1 - T_.t - 0.3, Z0 = T_.z0 + T_.t + 0.3, Z1 = T_.z1 - T_.t - 0.3;
+    camera.position.x = THREE.MathUtils.clamp(camera.position.x, I0, I1); camera.position.z = THREE.MathUtils.clamp(camera.position.z, Z0, Z1);
+    const half = (T_.z1 - T_.z0) / 2, rY = T_.ridge - (T_.ridge - T_.eave) * Math.abs(camera.position.z - (T_.z0 + half)) / half;
+    camera.position.y = Math.min(camera.position.y, rY - 0.8);
+  }
   camera.position.y = Math.max(camera.position.y, me.pos.y + 0.25);
   if (fp) {
     camera.position.copy(camTarget);
@@ -738,6 +768,12 @@ function updateLabels(dt) {
 function updateVolume() {
   if (!soundOn) return;
   const z = me.pos.z, x = me.pos.x;
+  if (zoneWall) {
+    // 觀影館內兩台都是全音量；在廣場上隨距離變小
+    const tv = inTheater(x, z) ? 100 : Math.max(0, 40 - Math.hypot(x - THEATER.x1, z - 15) * 1.2);
+    for (const t of tScreens) t.setVolume(tv * userVol / 100);
+    return;
+  }
   let v;
   if (z < -6.3 && Math.abs(x) < 14.5) v = 100 - Math.max(0, (-z - 40)) * 0; // 大廳內
   else if (z < 0) v = 70;
@@ -767,7 +803,8 @@ function frame() {
       if (lbl !== sitLabel) { sitLabel = lbl; sb.textContent = lbl; sb.disabled = !nearSeat; sb.classList.toggle('taken', !nearSeat); }
     } else $('#btn-sit').classList.remove('hidden');
     saveSnapMaybe(now);
-    if (now - lastVideoTick > 4000) { lastVideoTick = now; screen.tick(); updateVolume(); }
+    updateZone();
+    if (now - lastVideoTick > 4000) { lastVideoTick = now; for (const x of allScreens) x.tick(); updateVolume(); }
   } else {
     // 開場：環繞建築外觀
     introT += dt;
@@ -818,4 +855,4 @@ const jumpBtn = $('#btn-jump');
 jumpBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); jumpQueued = performance.now(); jumpBtn.classList.add('press'); });
 for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) jumpBtn.addEventListener(ev, () => jumpBtn.classList.remove('press'));
 jumpBtn.addEventListener('contextmenu', (e) => e.preventDefault());
-window.__hall = { travel, seatOcc, checkVersion, get media() { return mediaState; }, screen, dock, me, cam, camera, scene, world, remotes, toggleSit, collide, groundAt, freeSpot, chat, jump: () => { jumpQueued = performance.now(); }, get ws() { return ws; }, get viewMode() { return viewMode; }, enterFull, exitFull };
+window.__hall = { tScreens, get zoneWall() { return zoneWall; }, setMode, seatView, travel, seatOcc, checkVersion, get media() { return mediaState; }, screen, dock, me, cam, camera, scene, world, remotes, toggleSit, collide, groundAt, freeSpot, chat, jump: () => { jumpQueued = performance.now(); }, get ws() { return ws; }, get viewMode() { return viewMode; }, enterFull, exitFull };
