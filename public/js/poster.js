@@ -1,5 +1,5 @@
 // BLG 海報（大螢幕正上方）：上排依淘汰順序 HLE → DK → T1 → GEN.G，下排 BLG Knight
-// 關燈特效：Knight 雙眼亮起紅光 → 雙道雷射依序掃過四人（被掃過的變黑白、變暗，再劃上一道紅色斜痕）→ 掃完後眼睛恢復正常，聚光落在 Knight 身上
+// 關燈特效：Knight 雙眼亮起紅光 → 雙道雷射依序掃過四人（被掃過的變黑白、變暗）→ 掃完後眼睛恢復正常，聚光落在 Knight 身上
 // 開燈後四人慢慢恢復彩色。圖片由 tools/bake_poster.py 產生。
 import * as THREE from 'three';
 
@@ -12,7 +12,7 @@ const SCAN_DELAY = 0.35, SCAN = 1.4;       // 雷射到位後開始往下掃、�
 const vert = `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
 const frag = `
 uniform sampler2D map; uniform vec2 uPx; uniform float uTime, uDark, uGone, uEye, uBeam, uFlash, uFocus;
-uniform float uScan[4]; uniform float uSlash[4]; uniform vec2 uTarget; uniform vec2 uEyeA; uniform vec2 uEyeB;
+uniform float uScan[4]; uniform vec2 uTarget; uniform vec2 uEyeA; uniform vec2 uEyeB;
 varying vec2 vUv;
 float segD(vec2 p, vec2 a, vec2 b){ vec2 v = b - a; float t = clamp(dot(p - a, v) / dot(v, v), 0.0, 1.0); return length(p - (a + t * v)); }
 float hash(float n){ return fract(sin(n) * 43758.5453); }
@@ -23,7 +23,7 @@ void main(){
   vec3 add = vec3(0.0);
   if (p.y < ${TOP}.0) {
     int i = int(clamp(floor(p.x / ${PW}.0), 0.0, 3.0));
-    float x0 = float(i) * ${PW}.0, s = uScan[i];
+    float s = uScan[i];
     float sy = mix(-20.0, ${TOP}.0 + 20.0, s);
     float passed = smoothstep(sy + 5.0, sy - 5.0, p.y) * uGone;
     float g = dot(c, vec3(0.2126, 0.7152, 0.0722));
@@ -32,10 +32,6 @@ void main(){
     float scanning = step(0.001, s) * step(s, 0.999) * uGone;
     float dy = p.y - sy;
     add += RED * scanning * (exp(-dy * dy / 18.0) * 2.2 + exp(-dy * dy / 900.0) * 0.45 + step(dy, 0.0) * exp(dy / 60.0) * 0.12);
-    // 紅色斜痕（左上到右下），帶一點光暈
-    float sd = segD(p, vec2(x0 + 34.0, 70.0), vec2(x0 + ${PW}.0 - 34.0, ${TOP}.0 - 120.0));
-    float sl = uSlash[i] * uGone;
-    add += RED * sl * (smoothstep(6.0, 3.0, sd) * 1.5 + exp(-sd * sd / 220.0) * 0.35);
     // 被擊倒的瞬間整格閃一下紅光
     add += RED * uFlash * step(abs(float(i) - uTarget.x / ${PW}.0 + 0.5), 0.5) * 0.25;
   }
@@ -77,7 +73,7 @@ export function buildPoster(height) {
   map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 8;
   const u = {
     map: { value: map }, uPx: { value: PX }, uTime: { value: 0 }, uDark: { value: 0 }, uGone: { value: 0 }, uEye: { value: 0 }, uBeam: { value: 0 }, uFlash: { value: 0 }, uFocus: { value: 0 },
-    uScan: { value: [0, 0, 0, 0] }, uSlash: { value: [0, 0, 0, 0] }, uTarget: { value: new THREE.Vector2(PW / 2, 40) },
+    uScan: { value: [0, 0, 0, 0] }, uTarget: { value: new THREE.Vector2(PW / 2, 40) },
     uEyeA: { value: new THREE.Vector2(...EYES[0]) }, uEyeB: { value: new THREE.Vector2(...EYES[1]) },
   };
   const mat = new THREE.ShaderMaterial({ uniforms: u, vertexShader: vert, fragmentShader: frag, toneMapped: false });
@@ -88,7 +84,7 @@ export function buildPoster(height) {
   // e：1 = 開燈、0 = 關燈（已緩動）；t：秒
   const update = (t, e) => {
     u.uTime.value = t; u.uDark.value = 1 - e;
-    if (!dark && e < 0.5) { dark = true; t0 = t; for (let i = 0; i < 4; i++) { u.uScan.value[i] = 0; u.uSlash.value[i] = 0; } }
+    if (!dark && e < 0.5) { dark = true; t0 = t; for (let i = 0; i < 4; i++) { u.uScan.value[i] = 0; } }
     else if (dark && e > 0.5) dark = false;
     const fade = dark ? 1 : 1 - e; // 開燈時特效整體淡出、四人恢復彩色
     u.uGone.value = fade;
@@ -100,7 +96,6 @@ export function buildPoster(height) {
       for (let i = 0; i < 4; i++) {
         const a = START + i * STEP;
         u.uScan.value[i] = THREE.MathUtils.clamp((r - a - SCAN_DELAY) / SCAN, 0, 1);
-        u.uSlash.value[i] = ss(r, a + SCAN_DELAY + SCAN, a + SCAN_DELAY + SCAN + 0.25);
         if (r >= a - 0.1 && r < a + STEP - 0.15) {
           beam = ss(r, a - 0.1, a + 0.2) * (1 - ss(r, a + SCAN_DELAY + SCAN + 0.15, a + SCAN_DELAY + SCAN + 0.5));
           const sy = THREE.MathUtils.lerp(-20, TOP + 20, u.uScan.value[i]);
