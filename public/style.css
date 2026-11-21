@@ -369,3 +369,57 @@ body.touch #btn-sit{bottom:max(186px,calc(env(safe-area-inset-bottom) + 174px))}
 body.touch #admin-dock{right:max(160px,calc(env(safe-area-inset-right) + 160px))}
 body.touch #channel{bottom:max(206px,calc(env(safe-area-inset-bottom) + 196px))}
 @media (max-height:500px){ body.touch #minimap{--mw:58px} body.touch #minimap.picking{--mw:min(150px,calc((100dvh - 70px) * .46))} }
+
+/* ---- 觀影館：觀看方式工具列（同時視聽） ---- */
+#tv-bar{position:absolute;left:50%;top:calc(max(14px,env(safe-area-inset-top)) + 52px);transform:translateX(-50%);z-index:16;display:flex;align-items:center;gap:6px;
+  padding:5px;border-radius:14px;border:1px solid rgba(184,149,74,.45);background:rgba(18,16,12,.72);pointer-events:auto;
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 8px 26px rgba(0,0,0,.45);transition:opacity .45s,transform .45s;white-space:nowrap}
+#tv-bar.hidden{display:none}
+#tv-bar button{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 11px;border:0;border-radius:9px;background:transparent;color:#e6dcc4;
+  font:600 13px "Noto Sans TC",system-ui,sans-serif;letter-spacing:.04em;cursor:pointer;transition:background .2s,color .2s}
+#tv-bar button:hover{background:rgba(232,220,188,.1)}
+#tv-bar svg{width:18px;height:18px;flex:none}
+#tv-bar .tv-seg{display:inline-flex;gap:2px;padding:2px;border-radius:10px;background:rgba(0,0,0,.28)}
+#tv-bar .tv-seg button.on{background:linear-gradient(180deg,#c9a24a,#9c7a32);color:#1a140a;box-shadow:inset 0 1px 0 rgba(255,240,200,.45)}
+#tv-bar .tv-num{font:600 15px Cinzel,serif;letter-spacing:.08em;min-width:14px;text-align:center}
+#tv-bar .tv-tool{padding:0 9px}
+#tv-bar .tv-tool.hidden{display:none}
+#tv-bar .tv-vol{display:inline-flex;gap:2px;margin-left:2px;padding-left:6px;border-left:1px solid rgba(232,220,188,.16)}
+#tv-bar .tv-vol button{font:600 13px Cinzel,serif;padding:0 8px;gap:4px}
+#tv-bar .tv-vol i{font-style:normal;font-size:13px}
+#tv-bar .tv-vol button.off{color:rgba(230,220,196,.45)}
+body.touch #tv-bar{top:calc(max(12px,env(safe-area-inset-top)) + 100px)}
+body.touch.tv-on #seat-tools{top:calc(max(12px,env(safe-area-inset-top)) + 150px)}
+body.tv-on:not(.mode-flat) #toast{top:124px}
+/* 平面模式：只剩兩台螢幕＋工具列 */
+body.mode-flat #stage{background:#050505}
+body.mode-flat #gl{visibility:hidden}
+body.mode-flat #hud > :not(#tv-bar):not(#tv-hit):not(#toast){display:none!important}
+body.mode-flat #tv-bar{top:auto;bottom:max(18px,calc(env(safe-area-inset-bottom) + 10px))}
+body.mode-flat #tv-bar.idle{opacity:0;transform:translate(-50%,12px);pointer-events:none}
+body.mode-flat.tv-idle{cursor:none}
+body.mode-flat #toast{top:auto;bottom:86px}
+#tv-hit{position:absolute;inset:0;z-index:5;pointer-events:none}
+#tv-hit.hidden{display:none}
+#tv-pip{position:absolute;pointer-events:auto;cursor:pointer;border-radius:8px;touch-action:none}
+#tv-pip:hover,#tv-pip.dragging{box-shadow:inset 0 0 0 2px rgba(232,200,120,.85)}
+#tv-pip.dragging{cursor:grabbing;background:rgba(232,200,120,.12)}
+#tv-pip.hidden,#tv-div.hidden,.tv-tag.hidden{display:none}
+#tv-div{position:absolute;width:28px;height:84px;margin:-42px 0 0 -14px;pointer-events:auto;cursor:ew-resize;touch-action:none;display:flex;align-items:center;justify-content:center;opacity:.55;transition:opacity .3s}
+#tv-div.col{width:84px;height:28px;margin:-14px 0 0 -42px;cursor:ns-resize}
+#tv-div i{display:block;width:6px;height:56px;border-radius:3px;background:rgba(232,220,188,.85);box-shadow:0 0 0 1px rgba(0,0,0,.5),0 2px 10px rgba(0,0,0,.6)}
+#tv-div.col i{width:56px;height:6px}
+#tv-div:hover,#tv-div.dragging{opacity:1}
+body.tv-idle #tv-div:not(.dragging){opacity:0}
+.tv-tag{position:absolute;padding:3px 9px 2px;border-radius:6px;background:rgba(10,9,7,.62);color:#e8dcbc;font:600 13px Cinzel,serif;letter-spacing:.12em;
+  border:1px solid rgba(184,149,74,.5);transition:opacity .45s}
+.tv-tag.muted::after{content:" 🔇";font-size:11px}
+body.tv-idle .tv-tag{opacity:0}
+@media (max-width:560px){
+  #tv-bar{gap:3px;padding:4px}
+  #tv-bar button{height:32px;padding:0 7px}
+  #tv-bar .tv-tool{padding:0 6px}
+  #tv-bar svg{width:16px;height:16px}
+  #tv-bar .tv-seg b:not(.tv-num){display:none}
+  #tv-bar .tv-vol{padding-left:3px}
+}

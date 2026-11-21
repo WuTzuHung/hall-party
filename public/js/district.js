@@ -6,23 +6,39 @@ import * as T from './textures.js';
 import * as TW from './textures-wall.js';
 
 // ---- 配置 ----
-export const GREAT_WALL = { x0: -72, x1: -66, h: 40, z0: -84, z1: 114, gate0: 10.5, gate1: 19.5, spring: 8.5 };
-export const THEATER = { x0: -136, x1: -100, z0: 2, z1: 28, t: 1.2, eave: 10.6, ridge: 25.4 };
-const IN = { x0: THEATER.x0 + THEATER.t, x1: THEATER.x1 - THEATER.t, z0: THEATER.z0 + THEATER.t, z1: THEATER.z1 - THEATER.t }; // 室內
+// 三層同心圓城牆（圓心 RC）：外城牆、中城牆、內城牆，城門都開在正東（朝街道），穿過三道門才到最內圈的觀影館
+export const RC = { x: -178, z: 15 };
+// R：牆中心線半徑；L：城門那一段直牆的半長（直牆兩端剛好接上圓弧）；X：城門直牆的中心 x
+export const RINGS = [
+  { key: 'outer', R: Math.hypot(109, 20), L: 20, h: 40, x0: -72, x1: -66, label: 'TOR · DER · MAUER', roman: 'I' },
+  { key: 'middle', R: Math.hypot(72, 16), L: 16, h: 34, x0: -109, x1: -103, label: 'ZWEITES · TOR', roman: 'II' },
+  { key: 'inner', R: Math.hypot(41, 13), L: 13, h: 28, x0: -140, x1: -134, label: 'INNERES · TOR', roman: 'III' },
+];
+export const RING_T = 6, RING_FOOT = 1.35; // 牆厚、牆腳最外一階
+const GATE = { gate0: 10.5, gate1: 19.5, spring: 8.5 };
+export const GREAT_WALL = { ...RINGS[0], ...GATE, z0: 15 - RINGS[0].L, z1: 15 + RINGS[0].L };
+// 觀影館的建模座標沿用原本的位置（x -136..-100），建好後整棟往西移 DX 到最內圈的中央
+const DX = -60;
+const TH0 = { x0: -136, x1: -100, z0: 2, z1: 28, t: 1.2, eave: 10.6, ridge: 25.4 };
+const IN = { x0: TH0.x0 + TH0.t, x1: TH0.x1 - TH0.t, z0: TH0.z0 + TH0.t, z1: TH0.z1 - TH0.t }; // 室內（建模座標）
 // 兩台螢幕（掛在西牆、面向 +x）
-export const TSCREENS = [
+const TS0 = [
   // 面向螢幕（-x）時左手邊是 +z：A（I）在左、B（II）在右
   { key: 'a', x: IN.x0 + 0.42, y: 5.75, z: 15 + 5.4, w: 9.6, h: 5.4, ry: Math.PI / 2 },
   { key: 'b', x: IN.x0 + 0.42, y: 5.75, z: 15 - 5.4, w: 9.6, h: 5.4, ry: Math.PI / 2 },
 ];
 // 兩台螢幕合起來的觀看焦點（坐下、最佳視角、全螢幕用）
-export const TFOCUS = { x: IN.x0 + 0.42, y: 5.75, z: 15, w: 20.4, h: 5.4 };
-export const DISTRICT = { x0: -150, x1: -66, z0: -6, z1: 36 }; // 小地圖用
-export const inTheater = (x, z) => x > IN.x0 - 0.2 && x < IN.x1 + 0.3 && z > IN.z0 && z < IN.z1;
+const TF0 = { x: IN.x0 + 0.42, y: 5.75, z: 15, w: 20.4, h: 5.4 };
+// 對外（世界座標）
+export const THEATER = { ...TH0, x0: TH0.x0 + DX, x1: TH0.x1 + DX };
+export const TSCREENS = TS0.map((c) => ({ ...c, x: c.x + DX }));
+export const TFOCUS = { ...TF0, x: TF0.x + DX };
+export const DISTRICT = { x0: RC.x - RINGS[0].R - 4, x1: -66, z0: RC.z - RINGS[0].R - 4, z1: RC.z + RINGS[0].R + 4 }; // 小地圖用
+export const inTheater = (x, z) => x > IN.x0 + DX - 0.2 && x < IN.x1 + DX + 0.3 && z > IN.z0 && z < IN.z1;
 export const inDistrict = (x) => x < -69;
 
 const roofY = (z) => { // 屋頂下緣（室內天花）的高度
-  const T_ = THEATER, half = (T_.z1 - T_.z0) / 2, d = Math.abs(z - (T_.z0 + half));
+  const T_ = TH0, half = (T_.z1 - T_.z0) / 2, d = Math.abs(z - (T_.z0 + half));
   return T_.ridge - (T_.ridge - T_.eave) * (d / half);
 };
 
@@ -33,10 +49,14 @@ const SHEETS = []; // 會隨風擺動的旗幟
 export function buildWallDistrict(api, scene, anim, q) {
   W = api;
   makeMats(q);
-  greatWall(scene);
+  // 觀影館：用原本的建模座標建，整棟平移到最內圈
+  shifted(scene, DX, (sc) => { theaterHall(sc); theaterInterior(sc); theaterYard(sc); });
+  ground();
+  for (const R of RINGS) { greatWall(scene, { ...R, ...GATE, z0: RC.z - R.L, z1: RC.z + R.L }); ringWall(scene, R); }
+  countryside(scene);
   plaza(scene);
-  theaterHall(scene);
-  theaterInterior(scene);
+  midTown(scene);
+  innerYard(scene);
   // 火光閃爍（只在城牆區時更新，省效能）
   anim.push((t) => {
     if (!W.zone.wall) return;
@@ -51,7 +71,7 @@ export function buildWallDistrict(api, scene, anim, q) {
       p.needsUpdate = true; sh.g.computeVertexNormals();
     }
   });
-  return { lights: LIGHTS, ral: { x: TFOCUS.x + 0.25, y: TFOCUS.y, z: TFOCUS.z, w: TFOCUS.w, h: TFOCUS.h } };
+  return { lights: LIGHTS, rings: RINGS.map((R) => ({ x: RC.x, z: RC.z, R: R.R, L: R.L, h: R.h, t: RING_T / 2 + RING_FOOT })), ral: { x: TFOCUS.x + 0.25, y: TFOCUS.y, z: TFOCUS.z, w: TFOCUS.w, h: TFOCUS.h } };
 }
 
 // ---------- 材質 ----------
@@ -97,6 +117,10 @@ function makeMats(q) {
     brass: { mat: std({ color: 0xa8843e, roughness: 0.4, metalness: 0.9 }) },
     wax: { mat: std({ color: 0xefe2c4, roughness: 0.6, emissive: 0x2a1a08 }) },
     straw: { mat: std({ color: 0xb49a5a, roughness: 1 }) },
+    leaf: { mat: std({ color: 0x56693a, roughness: 1, flatShading: true }) },
+    leafD: { mat: std({ color: 0x435430, roughness: 1, flatShading: true }) },
+    field: { mat: std({ color: 0x5d5a33, roughness: 1 }) },
+    fieldG: { mat: std({ color: 0x4b5a2e, roughness: 1 }) },
     canvasC: { mat: std({ color: 0xcbbd9c, roughness: 1, side: THREE.DoubleSide }) },
     ember: { mat: new THREE.MeshBasicMaterial({ color: 0xff7a26 }) },
     soot: { mat: std({ color: 0x0d0b0a, roughness: 1 }) },
@@ -213,9 +237,218 @@ function crate(x, y, z, s = 0.8, ry = 0) {
   W.walls.push({ x0: x - s * 0.6, x1: x + s * 0.6, z0: z - s * 0.6, z1: z + s * 0.6, y0: y, y1: y + Math.max(1.6, s) });
 }
 
+// 用原本的建模座標建造，再整體沿 x 平移 dx（觀影館從舊位置移到最內圈）：所有幾何、碰撞、座位、光源、場景物件都跟著移
+function shifted(scene, dx, fn) {
+  const W0 = W, L0 = LIGHTS.length;
+  const mv = (c) => ({ ...c, x0: c.x0 + dx, x1: c.x1 + dx });
+  W = {
+    ...W0,
+    box: (x0, y0, z0, x1, y1, z1, ...r) => W0.box(x0 + dx, y0, z0, x1 + dx, y1, z1, ...r),
+    add: (g, k) => { g.translate(dx, 0, 0); return W0.add(g, k); },
+    cyl: (rt, rb, h, x, ...r) => W0.cyl(rt, rb, h, x + dx, ...r),
+    glow: (_sc, x, ...r) => W0.glow(scene, x + dx, ...r),
+    walls: { push: (...cs) => W0.walls.push(...cs.map(mv)) },
+    camBlock: { push: (...cs) => W0.camBlock.push(...cs.map(mv)) },
+    floors: { push: (...cs) => W0.floors.push(...cs.map(mv)) },
+    seats: { push: (...cs) => W0.seats.push(...cs.map((c) => ({ ...c, x: c.x + dx }))) },
+  };
+  const sc = { add: (...os) => { for (const o of os) { o.position.x += dx; scene.add(o); } } };
+  try { fn(sc); } finally { W = W0; }
+  for (const l of LIGHTS.slice(L0)) l.x += dx;
+}
+// 城內的地面（三層城牆都在上面）
+function ground() {
+  const D = DISTRICT;
+  box(D.x0 - 30, -0.3, D.z0 - 30, -66, 0.05, D.z1 + 30, 'earth');
+  // 外城牆以外（街道兩側看不到的地方）也擋住，維持原本街道的邊界
+  W.solidOnly(-72, -1, D.z0 - 30, -66, 60, RC.z - RINGS[0].L);
+  W.solidOnly(-72, -1, RC.z + RINGS[0].L, -66, 60, D.z1 + 30);
+}
+// 圓弧城牆：城門那段直牆以外的整圈，用很多段直牆拼成；外側每三段一座扶壁，頂端雙側女兒牆＋雉堞
+function ringWall(scene, Rg) {
+  const { R, L, h } = Rg, t = RING_T / 2, C = RC;
+  const th0 = Math.atan2(L, Math.sqrt(R * R - L * L));
+  const span = 2 * Math.PI - 2 * th0, N = Math.ceil(span * R / 7.5), d = span / N, half = Math.sin(d / 2), cd = Math.cos(d / 2);
+  // 在角度 a、半徑 r0..r1、高度 y0..y1 放一段（沿切線長度 len，可再沿切線偏移 u）
+  const seg = (a, r0, r1, y0, y1, key, len = null, u = 0) => {
+    const ca = Math.cos(a), sa = Math.sin(a), rm = (r0 + r1) / 2 * cd;
+    const g = new THREE.BoxGeometry(len ?? 2 * r1 * half + 0.06, y1 - y0, r1 - r0);
+    P(g, { x: C.x + rm * ca - sa * u, y: (y0 + y1) / 2, z: C.z + rm * sa + ca * u, ry: -(a + Math.PI / 2) }); add(g, key);
+  };
+  for (let i = 0; i < N; i++) {
+    const a = th0 + (i + 0.5) * d;
+    seg(a, R - t, R + t, 0, h, 'gwStone');
+    // 往外收分的牆腳（三層退台）＋石帶
+    for (let k = 0; k < 3; k++) {
+      const dd = (3 - k) * 0.45, y1 = 1.4 + k * 1.4;
+      seg(a, R + t, R + t + dd, 0, y1, 'gwStone'); seg(a, R - t - dd, R - t, 0, y1, 'gwStone');
+      seg(a, R + t + dd - 0.02, R + t + dd + 0.1, y1 - 0.25, y1, 'trim'); seg(a, R - t - dd - 0.1, R - t - dd + 0.02, y1 - 0.25, y1, 'trim');
+    }
+    for (const y of [14, 27]) if (y < h - 3) { seg(a, R + t, R + t + 0.35, y, y + 0.55, 'trim'); seg(a, R - t - 0.35, R - t, y, y + 0.55, 'trim'); }
+    // 頂端：女兒牆與雉堞（兩側）
+    seg(a, R + t - 0.5, R + t + 0.2, h, h + 1.3, 'gwStone'); seg(a, R - t - 0.2, R - t + 0.5, h, h + 1.3, 'gwStone');
+    const segL = 2 * R * half, nm = Math.max(1, Math.round(segL / 2.6));
+    for (let m = 0; m < nm; m++) {
+      const u = (m + 0.5) * segL / nm - segL / 2;
+      seg(a, R + t - 0.5, R + t + 0.2, h + 1.3, h + 2.6, 'gwStone', 1.4, u); seg(a, R - t - 0.2, R - t + 0.5, h + 1.3, h + 2.6, 'gwStone', 1.4, u);
+    }
+    // 牆頂步道（木棧板）
+    seg(a, R - t + 0.5, R + t - 0.5, h, h + 0.08, 'oakDark');
+    // 外側扶壁（三層收分）
+    if (i % 3 === 1) for (let k = 0; k < 3; k++) {
+      const y1 = Math.min(h - 6, 12 + k * 9), dd = 2.2 - k * 0.6;
+      if (y1 <= 0) continue;
+      seg(a, R + t, R + t + dd, 0, y1, 'gwStone', 2.6);
+      seg(a, R + t, R + t + dd + 0.05, y1, y1 + 0.35, 'trim', 2.7);
+    }
+    // 內側牆面的火把（只有火光精靈，不加真的光源）
+    if (i % 4 === 2) {
+      const ca = Math.cos(a), sa = Math.sin(a), r = R - t - 0.42;
+      const g = new THREE.BoxGeometry(0.18, 0.4, 0.18); P(g, { x: C.x + (R - t - 0.05) * ca, y: 4.2, z: C.z + (R - t - 0.05) * sa }); add(g, 'iron');
+      fire(scene, C.x + r * ca, 4.55, C.z + r * sa, 1.25, 2.8, 0.55);
+    }
+  }
+  // 塔樓：每隔約 45° 一座方塔，往外突出、比城牆高（城門兩側已有門樓）
+  const nT = 8;
+  for (let k = 1; k < nT; k++) {
+    const a = (k / nT) * 2 * Math.PI; if (a < th0 + 0.2 || a > 2 * Math.PI - th0 - 0.2) continue;
+    const H = h + 7, w = 8;
+    seg(a, R - t - 0.6, R + t + 3.5, 0, H, 'gwStone', w);
+    seg(a, R - t - 0.8, R + t + 3.7, H, H + 1.1, 'gwStone', w + 0.4);
+    for (const u of [-3.4, -1.1, 1.1, 3.4]) { seg(a, R + t + 2.7, R + t + 3.7, H + 1.1, H + 2.3, 'gwStone', 1.2, u); seg(a, R - t - 0.8, R - t + 0.2, H + 1.1, H + 2.3, 'gwStone', 1.2, u); }
+    for (const rr of [R - t - 0.3, R + t + 2.7]) for (const u of [-3.4, 3.4]) seg(a, rr - 0.5, rr + 1, H + 1.1, H + 2.3, 'gwStone', 1.2, u);
+    for (const y of [10, 18, 26]) if (y < H - 4) seg(a, R + t + 3.5, R + t + 3.56, y, y + 1.6, 'soot', 0.24); // 箭孔
+    // 木造防禦廊（頂端外挑的木棚，參考圖的 hoarding）
+    seg(a, R + t + 3.5, R + t + 5.0, H - 3.2, H - 0.4, 'oakDark', w - 0.6);
+    for (const u of [-3, -1, 1, 3]) seg(a, R + t + 3.5, R + t + 5.1, H - 3.6, H - 3.2, 'oak', 0.3, u);
+    const roof = new THREE.BoxGeometry(w + 0.2, 0.12, 2.2); const ca = Math.cos(a), sa = Math.sin(a), rm = R + t + 4.6;
+    P(roof, { x: C.x + rm * ca, y: H - 0.1, z: C.z + rm * sa, ry: -(a + Math.PI / 2), rx: -0.45 }); add(roof, 'roofWood');
+  }
+}
+// 觀影館前方的石圍牆（原本在廣場上，跟著觀影館一起移）
+function theaterYard(scene) {
+  box(-101, 0, -12, -99.4, 3.2, -1.4, 'hStone', true); box(-101, 0, 31.4, -99.4, 3.2, 42, 'hStone', true);
+  box(-101.15, 3.2, -12, -99.25, 3.45, -1.4, 'trim'); box(-101.15, 3.2, 31.4, -99.25, 3.45, 42, 'trim');
+}
+// 街燈（鐵柱＋燈籠）
+function lantern(scene, x, z) {
+  W.cyl(0.07, 0.1, 3.8, x, 0.15, z, 'iron', 8); W.cyl(0.18, 0.22, 0.3, x, 0.15, z, 'iron', 8);
+  box(x - 0.2, 3.95, z - 0.2, x + 0.2, 4.5, z + 0.2, 'glassHouse');
+  for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) box(x + a * 0.2 - 0.02, 3.95, z + b * 0.2 - 0.02, x + a * 0.2 + 0.02, 4.5, z + b * 0.2 + 0.02, 'iron');
+  const cap = new THREE.ConeGeometry(0.34, 0.36, 4); P(cap, { x, y: 4.68, z, ry: Math.PI / 4 }); add(cap, 'iron');
+  W.glow(scene, x, 4.22, z, 3, 0xffc070, 0.6);
+  W.walls.push({ x0: x - 0.22, x1: x + 0.22, z0: z - 0.22, z1: z + 0.22, y0: 0, y1: 5 });
+}
+// 石板主路（城門到城門）＋兩側卵石
+function road(x0, x1, cob = true) {
+  if (cob) { box(x0, -0.2, -8, x1, 0.15, 38, 'cobble'); W.floors.push({ x0, x1, z0: -8, z1: 38, y: 0.15 }); }
+  box(x0, 0.15, 13.2, x1, 0.17, 16.8, 'flagstone'); W.floors.push({ x0, x1, z0: 13.2, z1: 16.8, y: 0.17 });
+}
+// 中城（第二道與第三道城牆之間）：兩排民居、街燈、市集攤子
+function midTown(scene) {
+  road(-130, -109);
+  const north = [[-114, -121.5, 12.8, 8], [-121.5, -128.5, 14.2, 9]];
+  const south = [[-114, -120.8, 14.6, 10], [-120.8, -128.5, 12.0, 11]];
+  for (const [x0, x1, hh, i] of north) house(scene, x1, x0, -4, 1, hh, i);
+  for (const [x0, x1, hh, i] of south) house(scene, x1, x0, 34, -1, hh, i);
+  for (const [x, z] of [[-114, 9.4], [-114, 20.6], [-125, 9.4], [-125, 20.6]]) lantern(scene, x, z);
+  LIGHTS.push({ x: -119.5, y: 4.4, z: 9.4, d: 22, off: [0xffb46a, 40], on: [0xffb46a, 40], flick: 0.2 });
+  LIGHTS.push({ x: -119.5, y: 4.4, z: 20.6, d: 22, off: [0xffb46a, 40], on: [0xffb46a, 40], flick: 0.2 });
+  stall(scene, -118, 2.2, 1); stall(scene, -123.5, 27.8, -1);
+  barrel(-112.6, 0.15, 3.2); barrel(-113.4, 0.15, 2.4, 0.34, 0.85); crate(-128, 0.15, 27.2, 0.9, 0.4);
+}
+// 市集攤子：木架＋斜帆布頂＋貨物；dir：+1 朝 +z
+function stall(scene, x, z, dir) {
+  const w = 3.6, dpt = 1.8, zb = z - dir * dpt;
+  for (const [a, b] of [[-1, 0], [1, 0], [-1, 1], [1, 1]]) { const zz = b ? zb : z; W.cyl(0.06, 0.07, b ? 2.9 : 2.3, x + a * w / 2, 0.15, zz, 'oakDark', 6); }
+  box(x - w / 2, 0.85, Math.min(z, zb), x + w / 2, 0.95, Math.max(z, zb), 'oak');
+  box(x - w / 2, 0.15, Math.min(z, zb) + 0.1, x + w / 2, 0.85, Math.min(z, zb) + 0.18, 'oakDark');
+  const cv = new THREE.BoxGeometry(w + 0.4, 0.04, dpt + 0.6); P(cv, { x, y: 2.75, z: (z + zb) / 2, rx: dir * 0.32 }); add(cv, 'canvasC');
+  for (let k = 0; k < 4; k++) crate(x - w / 2 + 0.55 + k * 0.85, 0.95, (z + zb) / 2, 0.45, k * 0.3);
+  W.walls.push({ x0: x - w / 2 - 0.1, x1: x + w / 2 + 0.1, z0: Math.min(z, zb), z1: Math.max(z, zb), y0: 0, y1: 2 });
+}
+// 內城廣場（第三道城牆內、觀影館門前）
+function innerYard(scene) {
+  road(-160.2, -140);
+  for (const [x, z] of [[-145, 9.4], [-145, 20.6], [-154, 9.4], [-154, 20.6]]) lantern(scene, x, z);
+  LIGHTS.push({ x: -149.5, y: 4.4, z: 15, d: 24, off: [0xffb46a, 44], on: [0xffb46a, 44], flick: 0.2 });
+  // 旗桿（觀影館兩側）
+  for (const z of [6.4, 23.6]) {
+    const x = -157.6;
+    W.cyl(0.08, 0.12, 9, x, 0.15, z, 'oakDark', 8);
+    W.cyl(0.25, 0.32, 0.5, x, 0.15, z, 'hStone', 10);
+    const k = new THREE.SphereGeometry(0.14, 10, 8); P(k, { x, y: 9.25, z }); add(k, 'brass');
+    hangBanner(scene, x, 8.6, z + (z < 15 ? -0.95 : 0.95), 1.6, 4.6, 0, 'bannerG', 0.09);
+    W.walls.push({ x0: x - 0.3, x1: x + 0.3, z0: z - 0.3, z1: z + 0.3, y0: 0, y1: 3 });
+  }
+}
+
+// 外城與中城的田野：麥田、草垛、樹、木柵欄、農舍（三圈之間空著的地方）
+function countryside(scene) {
+  const C = RC, rng = mulberry(7);
+  const inBand = (x, z, r0, r1) => { const d = Math.hypot(x - C.x, z - C.z); return d > r0 && d < r1; };
+  const clearOfRoads = (x, z) => !(x > C.x && Math.abs(z - C.z) < 30); // 東邊的主街區不放
+  // 田地：外城一圈（半徑 79–102），中城一圈（45–68）
+  const HOUSES = [[-182, -174.5, -68, 1, 9.5, 12], [-201, -193, -64, 1, 10.5, 13], [-182, -174.5, 98, -1, 10, 14], [-158, -150.5, 92, -1, 9, 15], [-266, -258.5, 22, 1, 9.8, 16]];
+  const fields = HOUSES.map(([x0, x1, zf, dir]) => ({ x: (x0 + x1) / 2, z: zf - dir * 4.5, w: x1 - x0 + 3, d: 12, house: true }));
+  for (const [r0, r1, n] of [[80, 101, 22], [46, 67, 12]]) {
+    for (let k = 0; k < n; k++) {
+      const a = 0.45 + (k + rng() * 0.4) / n * (2 * Math.PI - 0.9), r = r0 + 3 + rng() * (r1 - r0 - 12);
+      const x = C.x + Math.cos(a) * r, z = C.z + Math.sin(a) * r;
+      const w = 7 + rng() * 6, d = 5 + rng() * 5;
+      if (!clearOfRoads(x, z) || !inBand(x - w / 2, z - d / 2, r0, r1) || !inBand(x + w / 2, z + d / 2, r0, r1) || !inBand(x - w / 2, z + d / 2, r0, r1) || !inBand(x + w / 2, z - d / 2, r0, r1)) continue;
+      if (fields.some((f) => Math.abs(f.x - x) < (f.w + w) / 2 + 1.5 && Math.abs(f.z - z) < (f.d + d) / 2 + 1.5)) continue;
+      fields.push({ x, z, w, d });
+      const key = rng() < 0.55 ? 'field' : 'fieldG';
+      box(x - w / 2, 0.05, z - d / 2, x + w / 2, 0.09, z + d / 2, key);
+      const along = rng() < 0.5;
+      for (let q = 0.6; q < (along ? d : w) - 0.3; q += 0.75) { // 犁溝
+        if (along) box(x - w / 2 + 0.15, 0.09, z - d / 2 + q, x + w / 2 - 0.15, 0.2, z - d / 2 + q + 0.32, key === 'field' ? 'straw' : 'leaf');
+        else box(x - w / 2 + q, 0.09, z - d / 2 + 0.15, x - w / 2 + q + 0.32, 0.2, z + d / 2 - 0.15, key === 'field' ? 'straw' : 'leaf');
+      }
+      // 木柵欄（兩邊）
+      for (const zz of [z - d / 2 - 0.4, z + d / 2 + 0.4]) {
+        box(x - w / 2, 0.55, zz - 0.04, x + w / 2, 0.65, zz + 0.04, 'oakDark'); box(x - w / 2, 0.95, zz - 0.04, x + w / 2, 1.05, zz + 0.04, 'oakDark');
+        for (let xx = x - w / 2; xx <= x + w / 2 + 0.01; xx += w / Math.ceil(w / 2.2)) box(xx - 0.06, 0.05, zz - 0.06, xx + 0.06, 1.2, zz + 0.06, 'oak');
+        W.walls.push({ x0: x - w / 2, x1: x + w / 2, z0: zz - 0.1, z1: zz + 0.1, y0: 0, y1: 1.2 });
+      }
+      if (key === 'field' && rng() < 0.7) { // 草垛
+        const hx = x + (rng() - 0.5) * (w - 2), hz = z + (rng() - 0.5) * (d - 2);
+        W.cyl(0.9, 1.0, 1.2, hx, 0.09, hz, 'straw', 12);
+        const cn = new THREE.ConeGeometry(1.0, 1.1, 12); P(cn, { x: hx, y: 1.84, z: hz }); add(cn, 'straw');
+        W.walls.push({ x0: hx - 1, x1: hx + 1, z0: hz - 1, z1: hz + 1, y0: 0, y1: 2.4 });
+      }
+    }
+  }
+  // 樹：沿著城牆內側與田邊
+  for (const [r0, r1, n] of [[79, 103, 46], [45, 69, 24], [12, 39, 10]]) {
+    for (let k = 0; k < n; k++) {
+      const a = 0.5 + rng() * (2 * Math.PI - 1), r = r0 + 1.5 + rng() * (r1 - r0 - 3);
+      const x = C.x + Math.cos(a) * r, z = C.z + Math.sin(a) * r;
+      if (!clearOfRoads(x, z)) continue;
+      if (fields.some((f) => Math.abs(f.x - x) < f.w / 2 + 2 && Math.abs(f.z - z) < f.d / 2 + 2)) continue;
+      if (Math.abs(x - (C.x)) < 22 && Math.abs(z - C.z) < 18) continue; // 觀影館周圍
+      tree(x, z, 0.8 + rng() * 0.6, rng);
+    }
+  }
+  // 農舍（外城的北、南、西）
+  for (const [x0, x1, zf, dir, hh, i] of HOUSES) house(scene, x0, x1, zf, dir, hh, i);
+}
+function tree(x, z, k, rng) {
+  W.cyl(0.18 * k, 0.26 * k, 2.6 * k, x, 0.05, z, 'oakDark', 7);
+  const n = 3 + Math.floor(rng() * 2);
+  for (let i = 0; i < n; i++) {
+    const g = new THREE.IcosahedronGeometry((1.3 + rng() * 0.6) * k, 0);
+    P(g, { x: x + (rng() - 0.5) * 1.4 * k, y: (2.8 + i * 0.9 + rng() * 0.4) * k, z: z + (rng() - 0.5) * 1.4 * k, ry: rng() * 3 });
+    add(g, i % 2 ? 'leaf' : 'leafD');
+  }
+  W.walls.push({ x0: x - 0.3 * k, x1: x + 0.3 * k, z0: z - 0.3 * k, z1: z + 0.3 * k, y0: 0, y1: 3 });
+}
+function mulberry(a) { return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+
 // ---------- 巨大城牆與城門 ----------
-function greatWall(scene) {
-  const G = GREAT_WALL, top = G.h, r = (G.gate1 - G.gate0) / 2, gz = (G.gate0 + G.gate1) / 2;
+function greatWall(scene, G) {
+  const top = G.h, r = (G.gate1 - G.gate0) / 2, gz = (G.gate0 + G.gate1) / 2;
   // 牆身：城門兩側與城門上方（城門上方用帶半圓開口的擠出形狀）
   box(G.x0, 0, G.z0, G.x1, top, G.gate0, 'gwStone', true);
   box(G.x0, 0, G.gate1, G.x1, top, G.z1, 'gwStone', true);
@@ -269,6 +502,10 @@ function greatWall(scene) {
     }
     for (const y of [14, 27]) box(G.x1 + 4, y, z0, G.x1 + 4.35, y + 0.55, z1, 'trim');
     W.walls.push({ x0: G.x1, x1: G.x1 + 4, z0, z1, y0: 0, y1: 60 });
+    // 門樓頂端外挑的木造防禦廊
+    box(G.x1 + 4, top + 2.4, z0 - 0.3, G.x1 + 5.4, top + 5.2, z1 + 0.3, 'oakDark');
+    for (let z = z0; z <= z1 + 0.01; z += (z1 - z0) / 3) box(G.x1 + 4, top + 2.0, z - 0.12, G.x1 + 5.5, top + 2.4, z + 0.12, 'oak');
+    add(P(new THREE.BoxGeometry(2.2, 0.12, z1 - z0 + 1), { x: G.x1 + 4.9, y: top + 5.5, z: (z0 + z1) / 2, rz: 0.45 }), 'roofWood');
   }
   // 城門拱：外圈楔石（拱石）環，兩面都有
   for (const fx of [G.x1 + 0.0, G.x0]) {
@@ -311,38 +548,25 @@ function greatWall(scene) {
   for (const [fx, ry] of [[G.x1 + 0.03, Math.PI / 2], [G.x0 - 0.03, -Math.PI / 2]]) {
     const m = new THREE.PlaneGeometry(5.2, 5.2); P(m, { x: fx, y: G.spring + r + 4.8, z: gz, ry }); add(m, 'crestStone');
   }
-  const plate = new THREE.Mesh(new THREE.PlaneGeometry(9, 1.1), new THREE.MeshStandardMaterial({ map: T.textTexture(['TOR · DER · MAUER'], { w: 2048, h: 250, font: '600 150px "Cinzel", serif', color: '#3d3a35', letter: 30, fit: 1900 }), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4, roughness: 0.9 }));
+  const plate = new THREE.Mesh(new THREE.PlaneGeometry(9, 1.1), new THREE.MeshStandardMaterial({ map: T.textTexture([G.label], { w: 2048, h: 250, font: '600 150px "Cinzel", serif', color: '#3d3a35', letter: 30, fit: 1900 }), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4, roughness: 0.9 }));
   plate.position.set(G.x1 + 0.04, G.spring + r + 1.75, gz); plate.rotation.y = Math.PI / 2; scene.add(plate);
   box(G.x1, G.spring + r + 1.05, gz - 5, G.x1 + 0.3, G.spring + r + 1.2, gz + 5, 'trim'); box(G.x1, G.spring + r + 2.35, gz - 5, G.x1 + 0.3, G.spring + r + 2.5, gz + 5, 'trim');
   // 火把：街道側與城內側各兩支
   for (const z of [G.gate0 - 0.9, G.gate1 + 0.9]) { torch(scene, G.x1 + 4, 4.4, z < gz ? G.gate0 - 2.75 : G.gate1 + 2.75, 1, 0); torch(scene, G.x0, 4.4, z, -1, 0); }
   LIGHTS.push({ x: G.x0 - 2.5, y: 4.6, z: gz, d: 18, off: [0xff9a48, 34], on: [0xff9a48, 34], flick: 1 });
   // 城牆上懸掛的長旗（街道側，門樓兩側）
-  for (const z of [G.gate0 - 14, G.gate1 + 14]) hangBanner(scene, G.x1 + 0.2, 34, z, 3.2, 11, Math.PI / 2, 'bannerG', 0.12);
-  // 城內遠方的城牆（把整個城區圍起來）
-  box(-214, 0, -84, -208, 40, 114, 'gwStone'); box(-214, 0, -90, -66, 40, -84, 'gwStone'); box(-214, 0, 114, -66, 40, 120, 'gwStone');
-  for (let x = -208; x < -72; x += 2.6) { box(x, 40, -84, x + 1.4, 41.4, -83.4, 'gwStone'); box(x, 40, 113.4, x + 1.4, 41.4, 114, 'gwStone'); }
-  for (let z = -84; z < 114; z += 2.6) box(-208, 40, z, -207.4, 41.4, z + 1.4, 'gwStone');
-  // 城內地面
-  box(-208, -0.3, -84, G.x0, 0.05, 114, 'earth');
+  for (const z of [Math.max(G.z0 + 2.2, G.gate0 - 14), Math.min(G.z1 - 2.2, G.gate1 + 14)]) hangBanner(scene, G.x1 + 0.2, top - 6, z, 3.2, Math.min(11, top * 0.3), Math.PI / 2, 'bannerG', 0.12);
 }
 
 // ---------- 城內廣場與民居 ----------
 function plaza(scene) {
-  const G = GREAT_WALL;
-  box(-100.2, -0.2, -8, G.x0, 0.15, 38, 'cobble');
-  W.floors.push({ x0: -100.2, x1: G.x0, z0: -8, z1: 38, y: 0.15 });
-  // 路緣：中央一條略亮的石板路，從城門通往觀影館
-  box(-100, 0.15, 13.2, G.x0, 0.17, 16.8, 'flagstone');
-  W.floors.push({ x0: -100, x1: G.x0, z0: 13.2, z1: 16.8, y: 0.17 });
+  // 外城（第一道與第二道城牆之間）：卵石廣場，中央一條石板路通往下一道城門
+  road(-103, -72);
   // 兩排民居（山牆面向廣場）
-  const north = [[-72, -79.2, 13.5, 0], [-79.2, -85.6, 11.6, 1], [-85.6, -93.2, 14.6, 2], [-93.2, -100, 12.4, 3]];
-  const south = [[-72, -78.4, 12.2, 4], [-78.4, -86, 15, 5], [-86, -92.6, 11.8, 6], [-92.6, -100, 13.6, 7]];
+  const north = [[-76, -82, 13.5, 0], [-82, -87.6, 11.6, 1], [-87.6, -93.8, 14.6, 2], [-93.8, -100, 12.4, 3]];
+  const south = [[-76, -81.6, 12.2, 4], [-81.6, -88, 15, 5], [-88, -93.6, 11.8, 6], [-93.6, -100, 13.6, 7]];
   for (const [x0, x1, h, i] of north) house(scene, x1, x0, -4, 1, h, i);
   for (const [x0, x1, h, i] of south) house(scene, x1, x0, 34, -1, h, i);
-  // 觀影館兩側的石圍牆（擋住民居與觀影館之間的縫）
-  box(-101, 0, -12, -99.4, 3.2, -1.4, 'hStone', true); box(-101, 0, 31.4, -99.4, 3.2, 42, 'hStone', true);
-  box(-101.15, 3.2, -12, -99.25, 3.45, -1.4, 'trim'); box(-101.15, 3.2, 31.4, -99.25, 3.45, 42, 'trim');
   // 水井
   {
     const x = -84, z = 4.2;
@@ -356,15 +580,7 @@ function plaza(scene) {
     for (const s of [-1, 1]) { const rf = new THREE.BoxGeometry(2.6, 0.08, 1.2); P(rf, { x, y: 3.65, z: z + s * 0.42, rx: s * 0.75 }); add(rf, 'slate'); }
     W.walls.push({ x0: x - 1.35, x1: x + 1.35, z0: z - 1.35, z1: z + 1.35, y0: 0, y1: 1.8 });
   }
-  // 街燈（鐵柱＋燈籠）
-  for (const [x, z] of [[-77, 9.4], [-77, 20.6], [-93, 9.4], [-93, 20.6]]) {
-    W.cyl(0.07, 0.1, 3.8, x, 0.15, z, 'iron', 8); W.cyl(0.18, 0.22, 0.3, x, 0.15, z, 'iron', 8);
-    box(x - 0.2, 3.95, z - 0.2, x + 0.2, 4.5, z + 0.2, 'glassHouse');
-    for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) box(x + a * 0.2 - 0.02, 3.95, z + b * 0.2 - 0.02, x + a * 0.2 + 0.02, 4.5, z + b * 0.2 + 0.02, 'iron');
-    const cap = new THREE.ConeGeometry(0.34, 0.36, 4); P(cap, { x, y: 4.68, z, ry: Math.PI / 4 }); add(cap, 'iron');
-    W.glow(scene, x, 4.22, z, 3, 0xffc070, 0.6);
-    W.walls.push({ x0: x - 0.22, x1: x + 0.22, z0: z - 0.22, z1: z + 0.22, y0: 0, y1: 5 });
-  }
+  for (const [x, z] of [[-77, 9.4], [-77, 20.6], [-93, 9.4], [-93, 20.6]]) lantern(scene, x, z);
   LIGHTS.push({ x: -85, y: 4.4, z: 9.4, d: 22, off: [0xffb46a, 40], on: [0xffb46a, 40], flick: 0.2 });
   LIGHTS.push({ x: -85, y: 4.4, z: 20.6, d: 22, off: [0xffb46a, 40], on: [0xffb46a, 40], flick: 0.2 });
   // 推車、木桶、木箱、乾草
@@ -378,14 +594,14 @@ function plaza(scene) {
     const hay = new THREE.SphereGeometry(1, 12, 8); hay.scale(1.3, 0.45, 0.68); P(hay, { x, y: 1.25, z }); add(hay, 'straw');
     W.walls.push({ x0: x - 1.5, x1: x + 3.4, z0: z - 1, z1: z + 1, y0: 0, y1: 1.8 });
   }
-  barrel(-74, 0.15, -2.4); barrel(-74.8, 0.15, -1.6, 0.34, 0.85); barrel(-97.6, 0.15, 32.2); crate(-96.4, 0.15, 32.4, 0.9, 0.3); crate(-96.4, 1.05, 32.4, 0.7, 0.1);
-  crate(-74.4, 0.15, 32.2, 0.9, 0.2); barrel(-75.6, 0.15, 32.4);
+  barrel(-76, 0.15, -2.4); barrel(-76.8, 0.15, -1.6, 0.34, 0.85); barrel(-97.6, 0.15, 32.2); crate(-96.4, 0.15, 32.4, 0.9, 0.3); crate(-96.4, 1.05, 32.4, 0.7, 0.1);
+  crate(-76.4, 0.15, 32.2, 0.9, 0.2); barrel(-77.6, 0.15, 32.4);
   // 廣場上的旗桿
   for (const z of [9.6, 20.4]) {
-    W.cyl(0.08, 0.12, 9, -98.6, 0.15, z, 'oakDark', 8);
-    W.cyl(0.25, 0.32, 0.5, -98.6, 0.15, z, 'hStone', 10);
-    const k = new THREE.SphereGeometry(0.14, 10, 8); P(k, { x: -98.6, y: 9.25, z }); add(k, 'brass');
-    hangBanner(scene, -98.6, 8.6, z + (z < 15 ? -0.95 : 0.95), 1.6, 4.6, 0, z < 15 ? 'bannerG' : 'bannerR', 0.09);
+    W.cyl(0.08, 0.12, 9, -96.4, 0.15, z, 'oakDark', 8);
+    W.cyl(0.25, 0.32, 0.5, -96.4, 0.15, z, 'hStone', 10);
+    const k = new THREE.SphereGeometry(0.14, 10, 8); P(k, { x: -96.4, y: 9.25, z }); add(k, 'brass');
+    hangBanner(scene, -96.4, 8.6, z + (z < 15 ? -0.95 : 0.95), 1.6, 4.6, 0, z < 15 ? 'bannerG' : 'bannerR', 0.09);
     W.walls.push({ x0: -98.9, x1: -98.3, z0: z - 0.3, z1: z + 0.3, y0: 0, y1: 3 });
   }
 }
@@ -486,7 +702,7 @@ function house(scene, x0, x1, zf, dir, h, i) {
 // ---------- 觀影館外觀 ----------
 const LIGHTS = []; // 借用殿堂的光源：[{ x, y, z, d, off:[色, 強度], on:[色, 強度], flick }]
 function theaterHall(scene) {
-  const H = THEATER, t = H.t, gz = (H.z0 + H.z1) / 2;
+  const H = TH0, t = H.t, gz = (H.z0 + H.z1) / 2;
   // 階梯山牆的輪廓（u = z），比屋頂高出 0.7m
   const stepped = () => {
     const pts = [[H.z0, 0], [H.z1, 0], [H.z1, H.eave]];
@@ -652,7 +868,7 @@ function theaterHall(scene) {
 
 // ---------- 觀影館室內 ----------
 function theaterInterior(scene) {
-  const H = THEATER, gz = (H.z0 + H.z1) / 2;
+  const H = TH0, gz = (H.z0 + H.z1) / 2;
   // 地面：石板，中央走道鋪木板
   box(IN.x0, 0, IN.z0, IN.x1 + 0.0, 0.15, IN.z1, 'flagstone');
   W.floors.push({ x0: IN.x0, x1: IN.x1, z0: IN.z0, z1: IN.z1, y: 0.15 });
@@ -719,7 +935,7 @@ function theaterInterior(scene) {
   // 兩台螢幕中間的石柱
   box(IN.x0, 0.55, gz - 0.62, IN.x0 + 0.75, H.eave - 0.5, gz + 0.62, 'trim', true);
   add(P(new THREE.BoxGeometry(0.95, 0.35, 1.5), { x: IN.x0 + 0.42, y: H.eave - 0.55, z: gz }), 'trim');
-  for (const S of TSCREENS) {
+  for (const S of TS0) {
     const z0 = S.z - S.w / 2, z1 = S.z + S.w / 2, y0 = S.y - S.h / 2, y1 = S.y + S.h / 2, fw = 0.3;
     box(IN.x0, y0, z0, xs - 0.01, y1, z1, 'screenBlack'); // 螢幕背板
     // 外框

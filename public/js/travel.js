@@ -3,6 +3,7 @@
 // - 傳送（F / 點小地圖上的傳送點 / 數字鍵 1–9）：引導 3 秒，目的地同時亮起信標；完成後冷卻 15 秒
 // - 其他玩家看得到：開始／取消／完成都會透過伺服器轉播（t: 'fx'）
 import * as THREE from 'three';
+import { RINGS, RC, RING_T } from './district.js';
 
 export const HOME = { key: 'home', name: '大門口', x: 0, y: 0.18, z: 5.0 };
 export const POINTS = [
@@ -12,10 +13,10 @@ export const POINTS = [
   { key: 'west', name: '二樓左側', x: -8.9, y: 7, z: -42.5 },
   { key: 'east', name: '二樓右側', x: 8.9, y: 7, z: -42.5 },
   // 城牆區
-  { key: 'gate', name: '城門內', x: -77.5, y: 0.17, z: 15, area: 'wall' },
-  { key: 'square', name: '城內廣場', x: -90, y: 0.17, z: 15, area: 'wall' },
-  { key: 'theater', name: '觀影館', x: -110.5, y: 0.15, z: 15, area: 'wall' },
-  { key: 'tfront', name: '雙螢幕前', x: -131, y: 0.15, z: 15, area: 'wall' },
+  { key: 'gate', name: '第一道城門', x: -77.5, y: 0.17, z: 15, area: 'wall' },
+  { key: 'inner', name: '內城廣場', x: -146, y: 0.17, z: 15, area: 'wall' },
+  { key: 'theater', name: '觀影館', x: -170.5, y: 0.15, z: 15, area: 'wall' },
+  { key: 'tfront', name: '雙螢幕前', x: -191, y: 0.15, z: 15, area: 'wall' },
 ];
 for (const p of POINTS) p.area ||= 'hall';
 export const areaOf = (x) => (x < -69 ? 'wall' : 'hall');
@@ -230,7 +231,7 @@ class BurstFX {
 // ---------- 小地圖 ----------
 // 兩張平面圖共用同樣比例的畫布（31.2 : 67.8）：殿堂（螢幕在上）、城牆區（轉 90°，雙螢幕在上、城門在下）
 const MAP = { x0: -15.6, x1: 15.6, z0: -59.4, z1: 8.4 };
-const WMAP = { z0: -8.6, z1: 38.6, x0: -140.6 }; // 寬 47.2m（z），高 47.2 / 31.2 * 67.8 ≈ 102.6m（x）
+const WMAP = { z0: -103, z1: 133, x0: -300 }; // 城牆區總覽：寬 236m（z），上方是西（最內圈的觀影館），下方是街道與殿堂
 const PROJ = {
   hall: { span: MAP.x1 - MAP.x0, f: (x, z, s) => [(x - MAP.x0) * s, (z - MAP.z0) * s] },
   wall: { span: WMAP.z1 - WMAP.z0, f: (x, z, s) => [(WMAP.z1 - z) * s, (x - WMAP.x0) * s] },
@@ -239,36 +240,34 @@ function drawWall(g, s) {
   const P = (x, z) => PROJ.wall.f(x, z, s);
   const rect = (x0, z0, x1, z1) => { const [a, b] = P(x0, z1), [c, d] = P(x1, z0); g.rect(Math.min(a, c), Math.min(b, d), Math.abs(c - a), Math.abs(d - b)); };
   const fillR = (x0, z0, x1, z1, c) => { g.fillStyle = c; g.beginPath(); rect(x0, z0, x1, z1); g.fill(); };
-  const strokeR = (x0, z0, x1, z1, c, w = 1) => { g.strokeStyle = c; g.lineWidth = w; g.beginPath(); rect(x0, z0, x1, z1); g.stroke(); };
   const gold = 'rgba(224,189,106,', ink = 'rgba(245,238,221,', stone = 'rgba(170,176,168,';
-  // 街道（城牆外）
-  fillR(-66, 0, -38, 30, ink + '0.05)'); fillR(-66, 8, -38, 22, 'rgba(20,20,26,0.35)');
-  // 廣場卵石
-  fillR(-100, -4, -72, 34, stone + '0.12)');
-  fillR(-100, 13.2, -72, 16.8, stone + '0.16)');
+  const DX = -60; // 觀影館的建模座標 → 世界座標
+  // 街道與殿堂
+  fillR(-66, 0, 60, 30, ink + '0.05)'); fillR(-66, 8, 60, 22, 'rgba(20,20,26,0.35)');
+  fillR(-14.6, -58.6, 14.6, 0.35, 'rgba(120,90,190,0.30)');
+  // 三圈內的地面（越內圈越亮）
+  const [cx, cy] = P(RC.x, RC.z);
+  RINGS.forEach((R, i) => { g.fillStyle = `rgba(120,128,110,${0.05 + i * 0.035})`; g.beginPath(); g.arc(cx, cy, (R.R - RING_T / 2) * s, 0, Math.PI * 2); g.fill(); });
+  // 石板主路（從街道一路到觀影館）
+  fillR(-160, 13.2, -66, 16.8, stone + '0.22)');
   // 民居
-  for (const [x0, x1] of [[-79.2, -72], [-85.6, -79.2], [-93.2, -85.6], [-100, -93.2]]) { fillR(x0, -13, x1, -4, 'rgba(10,8,14,0.6)'); strokeR(x0, -13, x1, -4, stone + '0.3)', 0.7); }
-  for (const [x0, x1] of [[-78.4, -72], [-86, -78.4], [-92.6, -86], [-100, -92.6]]) { fillR(x0, 34, x1, 43, 'rgba(10,8,14,0.6)'); strokeR(x0, 34, x1, 43, stone + '0.3)', 0.7); }
-  // 城牆與城門
-  fillR(-72, -9, -66, 10.5, stone + '0.55)'); fillR(-72, 19.5, -66, 39, stone + '0.55)');
-  fillR(-66, 5, -62, 10.5, stone + '0.5)'); fillR(-66, 19.5, -62, 25, stone + '0.5)');
-  // 水井、街燈
-  g.fillStyle = stone + '0.5)'; { const [a, b] = P(-84, 4.2); g.beginPath(); g.arc(a, b, 1.3 * s, 0, Math.PI * 2); g.fill(); }
+  for (const [x0, x1, z0, z1] of [[-100, -76, -13, -4], [-100, -76, 34, 43], [-128.5, -114, -13, -4], [-128.5, -114, 34, 43]]) fillR(x0, z0, x1, z1, 'rgba(10,8,14,0.6)');
+  // 城牆：圓弧＋城門直牆＋門樓
+  for (const R of RINGS) {
+    const th0 = Math.atan2(R.L, Math.sqrt(R.R * R.R - R.L * R.L));
+    g.strokeStyle = stone + '0.62)'; g.lineWidth = Math.max(1.6, RING_T * s); g.beginPath();
+    g.arc(cx, cy, R.R * s, th0 + Math.PI / 2, 2 * Math.PI - th0 + Math.PI / 2); g.stroke();
+    fillR(R.x0, 15 - R.L, R.x1, 10.5, stone + '0.62)'); fillR(R.x0, 19.5, R.x1, 15 + R.L, stone + '0.62)');
+    fillR(R.x1, 5, R.x1 + 4, 10.5, stone + '0.55)'); fillR(R.x1, 19.5, R.x1 + 4, 25, stone + '0.55)');
+  }
   // 觀影館
-  fillR(-136, 2, -100, 28, 'rgba(10,6,16,0.6)');
-  const fl = g.createLinearGradient(0, P(-134.8, 0)[1], 0, P(-101.2, 0)[1]); fl.addColorStop(0, 'rgba(120,150,110,0.28)'); fl.addColorStop(1, 'rgba(110,90,60,0.22)');
-  g.fillStyle = fl; g.beginPath(); rect(-134.8, 3.2, -101.2, 26.8); g.fill();
-  for (const z of [2, 28]) { g.fillStyle = stone + '0.5)'; const [a, b] = P(-100, z); g.beginPath(); g.arc(a, b, 2.9 * s, 0, Math.PI * 2); g.fill(); }
-  // 長椅與餐桌
-  for (const x of [-129.2, -127.6, -126.0, -124.4, -122.8, -121.2, -119.6]) for (const [z0, z1] of [[4.2, 13.8], [16.2, 25.8]]) fillR(x - 0.22, z0, x + 0.3, z1, gold + '0.4)');
-  for (const z of [10.4, 19.6]) fillR(-116.4, z - 0.55, -104.2, z + 0.55, ink + '0.3)');
-  // 壁爐
-  fillR(-119.7, 3.2, -115.3, 4.7, 'rgba(255,140,60,0.5)');
-  // 兩台螢幕
-  g.save(); g.shadowColor = 'rgba(160,190,255,0.9)'; g.shadowBlur = 6 * (s / 4); g.fillStyle = 'rgba(210,225,255,0.95)';
-  for (const z of [9.6, 20.4]) { g.beginPath(); rect(-134.8, z - 4.8, -134.2, z + 4.8); g.fill(); }
+  fillR(-136 + DX, 2, -100 + DX, 28, 'rgba(10,6,16,0.75)');
+  g.fillStyle = 'rgba(120,150,110,0.3)'; g.beginPath(); rect(-134.8 + DX, 3.2, -101.2 + DX, 26.8); g.fill();
+  for (const x of [-129.2, -126.0, -122.8, -119.6]) for (const [z0, z1] of [[4.2, 13.8], [16.2, 25.8]]) fillR(x + DX - 0.4, z0, x + DX + 0.4, z1, gold + '0.4)');
+  g.save(); g.shadowColor = 'rgba(160,190,255,0.9)'; g.shadowBlur = 4; g.fillStyle = 'rgba(210,225,255,0.95)';
+  for (const z of [9.6, 20.4]) { g.beginPath(); rect(-135.4 + DX, z - 4.8, -133.8 + DX, z + 4.8); g.fill(); }
   g.restore();
-  g.strokeStyle = gold + '0.55)'; g.lineWidth = 1.2; g.beginPath(); rect(-134.8, 3.2, -101.2, 26.8); g.stroke();
+  g.strokeStyle = gold + '0.6)'; g.lineWidth = 1; g.beginPath(); rect(-136 + DX, 2, -100 + DX, 28); g.stroke();
 }
 const PIER_Z = [-11, -18, -25, -32, -39, -46, -53];
 function drawStatic(g, s) {

@@ -198,7 +198,7 @@ export function buildWorld(scene, renderer, q) {
   anim.push(stepLights);
   stepLights(0);
   return {
-    walls, floors, seats, camBlock, anim,
+    walls, floors, seats, camBlock, anim, rings: district.rings,
     // on：true 開燈、false 關燈；instant：true 時不做過渡（例如剛連線時套用伺服器狀態）
     setLights(on, instant = false) { LIGHT.target = on ? 1 : 0; if (instant) LIGHT.k = LIGHT.target; return LIGHT.target === 1; },
     get lightsOn() { return LIGHT.target === 1; },
@@ -1298,7 +1298,16 @@ export const ZONE = { wall: 0 };
 function zoneLights(district) {
   const home = POOL.map((l) => ({ p: l.position.clone(), d: l.distance }));
   const ralHome = HALL_RAL ? { p: HALL_RAL.position.clone(), q: HALL_RAL.quaternion.clone(), w: HALL_RAL.width, h: HALL_RAL.height, c: HALL_RAL.color.getHex() } : null;
-  const alt = district.lights.slice(0, POOL.length);
+  // 城牆區的光源比可借用的燈多：每走一段距離就改借給離相機最近的那幾盞（shader 的燈數不變）
+  const all = district.lights; let alt = []; const at = new THREE.Vector3(1e9, 0, 0);
+  const pick = () => {
+    const c = LIGHT.cam; at.copy(c);
+    const near = all.map((a) => [a, (a.x - c.x) ** 2 + (a.z - c.z) ** 2]).sort((p, q) => p[1] - q[1]).slice(0, POOL.length).map((p) => p[0]);
+    // 盡量保留原本已借的位置，只替換掉離開範圍的，避免燈光跳來跳去
+    const keep = alt.map((a) => (near.includes(a) ? a : null)), rest = near.filter((a) => !keep.includes(a));
+    alt = POOL.map((_, i) => keep[i] || rest.shift() || null);
+    POOL.forEach((l, i) => { const a = alt[i]; if (a) { l.position.set(a.x, a.y, a.z); l.distance = a.d; } });
+  };
   let was = -1;
   onLights((e, _in, t) => {
     const z = ZONE.wall;
@@ -1310,8 +1319,8 @@ function zoneLights(district) {
       }
       was = 0; return; // 殿堂內的燈由原本的 hook 設定顏色與強度
     }
+    if (was !== 1 || at.distanceToSquared(LIGHT.cam) > 25) pick();
     if (was !== 1) {
-      POOL.forEach((l, i) => { const a = alt[i]; if (a) { l.position.set(a.x, a.y, a.z); l.distance = a.d; } });
       if (HALL_RAL) { const r = district.ral; HALL_RAL.position.set(r.x, r.y, r.z); HALL_RAL.lookAt(r.x + 10, r.y, r.z); HALL_RAL.width = r.w; HALL_RAL.height = r.h; HALL_RAL.color.setHex(0xbfc8ff); }
       was = 1;
     }
