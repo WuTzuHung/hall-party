@@ -512,6 +512,17 @@ wss.on('connection', (ws) => {
       send(ws, { t: 'sitOk', seat: i }); broadcastSeats();
     } else if (m.t === 'stand') {
       if (freeSeatsOf(p.id)) broadcastSeats();
+    } else if (m.t === 'fx') {
+      // 回城／傳送特效：只轉發給其他人（開始、取消、完成）；限流 1 秒最多 4 次
+      const now = Date.now();
+      ws._fx = (ws._fx || []).filter(t => now - t < 1000);
+      if (ws._fx.length >= 4) return;
+      const k = m.k === 'tp' ? 'tp' : m.k === 'recall' ? 'recall' : null;
+      const s = ['start', 'cancel', 'done'].includes(m.s) ? m.s : null;
+      const d = int(m.d);
+      if (!k || !s || !(d >= -1 && d <= 9)) return;
+      ws._fx.push(now);
+      broadcast({ t: 'fx', id: p.id, k, s, d }, ws);
     } else if (m.t === 'wave') {
       broadcast({ t: 'wave', id: p.id }, ws);
     } else if (m.t === 'chat') {
