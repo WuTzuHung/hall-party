@@ -76,4 +76,12 @@ test('裝備庫：借用、歸還、距離檢查與狀態轉播', { timeout: 200
   b.send(JSON.stringify({ t: 'gear', ret: 1 })); assert.equal((await r).slot, -1);
   r = next(b, m => m.t === 'gearOk');
   b.send(JSON.stringify({ t: 'gear', take: 0 })); assert.equal((await r).slot, 0);
+
+  // 觀影館的燈與殿堂的燈分開：zone: 'wall' 只動 tlights，廣播 t:'tlights'
+  assert.equal(b.welcome.tlights, true);
+  const tl = next(b, m => m.t === 'tlights');
+  const res = await fetch(`http://127.0.0.1:${port}/api/admin/lights`, { method: 'POST', headers: { Authorization: 'Bearer isolated-gear-test', 'Content-Type': 'application/json' }, body: JSON.stringify({ on: false, zone: 'wall' }) });
+  const st = await res.json();
+  assert.equal(st.tlights, false); assert.equal(st.lights, true);
+  assert.equal((await tl).on, false);
 });

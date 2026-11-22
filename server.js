@@ -64,6 +64,7 @@ const defaults = {
   },
   countdown: null, // { at, id, start, live, title }
   lights: true, // 室內燈（管理員控制，所有人同步）
+  tlights: true, // 城牆觀影館的燈（同時視聽後台控制；關燈時只留牆上火把與壁爐）
   // 城牆區觀影館：兩台螢幕各自獨立的播放時鐘（同時視聽：A＝作品畫面、B＝實況）
   theater: { a: null, b: null }, // { id, live, title, playing, startedAt, pausedAt, dur, seq, gain }
 };
@@ -74,6 +75,7 @@ try {
   if (!Array.isArray(state.music.list)) state.music.list = [];
   if (state.mode !== 'match') state.mode = 'music';
   if (typeof state.lights !== 'boolean') state.lights = true;
+  if (typeof state.tlights !== 'boolean') state.tlights = true;
   if (!state.theater || typeof state.theater !== 'object') state.theater = { a: null, b: null };
   for (const k of ['a', 'b']) if (!state.theater[k] || !state.theater[k].id) state.theater[k] = null;
   if (state.music.index >= state.music.list.length) state.music.index = state.music.list.length ? 0 : -1;
@@ -173,7 +175,7 @@ function adminState() {
     mode: state.mode, serverTime: Date.now(), version: VERSION,
     music: { ...publicMedia().music, list: state.music.list.map(x => ({ id: x.id, title: x.title || '', live: !!x.live, dur: x.dur || 0 })) },
     countdown: state.countdown ? { ...state.countdown } : null,
-    lights: state.lights,
+    lights: state.lights, tlights: state.tlights,
     theater: publicTheater(),
   };
 }
@@ -313,7 +315,7 @@ function admit(ws) {
   ws._playerId = p.id;
   send(ws, {
     t: 'welcome', id: p.id, name, serverTime: Date.now(), media: publicMedia(), video: publicVideo(), max: state.maxUsers,
-    token: signToken(uid), version: VERSION, seats: seatList(), gears: gearList(), lights: state.lights,
+    token: signToken(uid), version: VERSION, seats: seatList(), gears: gearList(), lights: state.lights, tlights: state.tlights,
     players: [...players.values()].filter(o => o.id !== p.id && o.ws).map(o => ({ id: o.id, c: o.color, n: o.name, x: o.x, y: o.y, z: o.z, ry: o.ry, a: o.anim, g: o.g || 0 })),
   });
   broadcast({ t: 'join', id: p.id, c: p.color, n: name, x: p.x, y: p.y, z: p.z, ry: p.ry }, ws);
@@ -378,12 +380,13 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/admin/ticket') return json(res, 200, { ticket: signTicket() });
     const body = await readBody(req);
     if (p === '/api/admin/lights') {
-      // 室內燈：{ on: true|false } 或 { toggle: true }；只廣播 { t:'lights', on }，不動播放狀態
-      if (body.toggle === true) state.lights = !state.lights;
-      else if (typeof body.on === 'boolean') state.lights = body.on;
+      // 室內燈：{ on: true|false } 或 { toggle: true }；zone: 'wall' 是城牆觀影館的燈（廣播 t:'tlights'），否則是殿堂（t:'lights'）；不動播放狀態
+      const k = body.zone === 'wall' ? 'tlights' : 'lights';
+      if (body.toggle === true) state[k] = !state[k];
+      else if (typeof body.on === 'boolean') state[k] = body.on;
       else return json(res, 400, { error: '請提供 on（true／false）或 toggle: true' });
       save();
-      broadcast({ t: 'lights', on: state.lights });
+      broadcast({ t: k, on: state[k] });
       return json(res, 200, adminState());
     }
     if (p === '/api/admin/theater') {
