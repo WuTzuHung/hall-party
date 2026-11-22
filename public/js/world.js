@@ -8,6 +8,7 @@ import * as T from './textures.js';
 import { buildTrophy } from './trophy.js';
 import { reliefPanel } from './relief.js';
 import { buildPoster } from './poster.js';
+import { ROSTER, buildFigure, buildPlinth, statueMaterials } from './statues.js';
 import { buildWallDistrict, inTheater } from './district.js';
 import { buildLab, inLabRoom, inLabShop, LAB_EDGE } from './lab.js';
 
@@ -909,7 +910,7 @@ function buildInterior(scene, anim, q, renderer) {
     projMeshes.push(lo, hi, end);
   }
   // 地毯都以柱距（7m）為準：側廊兩塊各在一個柱距正中央，中央長毯對齊長桌
-  const rugs = [[0, -16.6, 5, 4], [-11.1, -35.5, 3.6, 5.6], [11.1, -35.5, 3.6, 5.6], [-11.1, -49.5, 3.6, 5.6], [11.1, -49.5, 3.6, 5.6], [0, -35.5, 5.2, 16]];
+  const rugs = [[0, -16.6, 5, 4], [-10.2, -35.5, 2.6, 5.6], [10.2, -35.5, 2.6, 5.6], [-10.2, -49.5, 2.6, 5.6], [10.2, -49.5, 2.6, 5.6], [0, -35.5, 5.2, 16]]; // 側廊地毯往內收，靠牆讓給冠軍雕像
   for (const [x, z, w, d] of rugs) { const r = new THREE.Mesh(new THREE.PlaneGeometry(w, d), rugMat); r.rotation.x = -Math.PI / 2; r.position.set(x, 0.02, z); scene.add(r); projMeshes.push(r); }
   onLights((e) => {
     // 開燈時也保留牆面花卉投影與地面光毯（使用者偏好原本的牆面），只有略為柔和
@@ -957,7 +958,8 @@ function buildInterior(scene, anim, q, renderer) {
     }
   }
   // 側廊的雞尾酒桌
-  for (const s of [-1, 1]) for (const z of [-28.5, -42.5]) cocktail(scene, s * 11.1, z); // 二樓下方的側廊，各在柱距正中央、與地毯交錯
+  for (const s of [-1, 1]) { cocktail(scene, s * 11.1, -28.5); cocktail(scene, s * 10.2, -45.2); } // 二樓下方的側廊；原本 -42.5 那張移到開間靠螢幕的一角，讓出雕像正前方
+  buildStatues(scene, q);
 
   // 室內燈光：同一組光源，在「開燈」與「關燈」兩組顏色／強度之間過渡（不增減光源數量，shader 不必重編）
   //   開燈：均勻明亮的暖白場燈，石材呈象牙白
@@ -1354,6 +1356,38 @@ function zoneLights(district, lab) {
     if (HALL_RAL) HALL_RAL.intensity = z === 2 ? LAB_TV_GLOW.k * lerp(26, 10, e) : lerp(3.0, 1.6, e);
   });
 }
+// BLG 2026 世界賽冠軍英雄雕像（statues.js）：兩側側廊靠牆、一個開間一座，面向中央並略朝入口。
+// 左邊由入口往螢幕：Bin 格溫、Xun 悟空、Knight 阿狸；右邊對稱：ON 璐璐、Viper 伊澤瑞爾、Knight 洛克。
+// FMVP Knight 的兩座在最靠大螢幕的那一格左右對望。
+function buildStatues(scene, q) {
+  const mats = statueMaterials();
+  const slots = [[-1, -35.5, 'GWEN'], [-1, -42.5, 'WUKONG'], [-1, -49.5, 'AHRI'], [1, -49.5, 'LOCKE'], [1, -42.5, 'EZREAL'], [1, -35.5, 'LULU']];
+  const sprites = [], pixes = [], pools = [];
+  for (const [s, z, champ] of slots) {
+    const e = ROSTER.find((r) => r.champ === champ); if (!e) continue;
+    const x = s * 12.35;
+    const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = s < 0 ? Math.PI / 2 - 0.3 : -(Math.PI / 2 - 0.3);
+    const pl = buildPlinth(e, { mats, high: q.high }); g.add(pl.group);
+    const f = buildFigure(e, { detail: q.high ? 1 : 0.6, mats }); f.group.position.y = pl.top; g.add(f.group);
+    scene.add(g); g.updateMatrixWorld(true);
+    const col = { x0: x - 0.92, x1: x + 0.92, z0: z - 0.92, z1: z + 0.92, y0: 0, y1: 1.9 }; // 基座轉了 0.3 弧度，碰撞框取外接方形
+    walls.push(col); camBlock.push({ ...col, y1: 1.15 });
+    for (const p of f.glows) { const w = f.group.localToWorld(p.clone()); sprites.push(glow(scene, w.x, w.y, w.z, 1.0, 0xffd08a, 0.3)); }
+    if (f.pix) pixes.push({ o: f.pix, y: f.pix.position.y, ph: pixes.length * 1.7 });
+    // 假的聚光：基座頂面的光池 + 從二樓樓板打下來的淡光錐（不增加真實光源）
+    const pool = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 2.6), new THREE.MeshBasicMaterial({ map: glowTex(), color: 0xffe6c0, transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false }));
+    pool.rotation.x = -Math.PI / 2; pool.position.set(x, 0.015, z); scene.add(pool); pools.push(pool);
+    const cone = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.95, 5.4, 24, 1, true), new THREE.MeshBasicMaterial({ color: 0xfff0d8, transparent: true, opacity: 0.04, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    cone.position.set(x, 3.9, z); scene.add(cone); pools.push(cone);
+  }
+  onLights((e, _in, t) => {
+    mats.glow.emissiveIntensity = lerp(2.4, 1.1, e) * (1 + 0.12 * Math.sin(t * 2.2));
+    for (const sp of sprites) sp.material.opacity = lerp(0.8, 0.18, e);
+    for (const p of pools) p.material.opacity = p.geometry.type === 'PlaneGeometry' ? lerp(0.38, 0.2, e) : lerp(0.06, 0.03, e);
+    for (const p of pixes) { p.o.position.y = p.y + Math.sin(t * 1.6 + p.ph) * 0.06; p.o.rotation.y = Math.sin(t * 0.7 + p.ph) * 0.5; }
+  });
+}
+
 // 給 district.js 使用的建模工具
 export const W = {
   box, cyl, place, solidOnly, glow, onLights, decal,
