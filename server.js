@@ -527,7 +527,8 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ----- 靜態檔案 -----
-  let file = p === '/' ? '/index.html' : p === '/admin' ? '/admin.html' : p;
+  // /admin/hall（光之殿堂工作台）、/admin/theater（城牆觀影館工作台）都是同一頁，由前端依網址切換
+  let file = p === '/' ? '/index.html' : /^\/admin(\/(hall|theater|wall))?\/?$/.test(p) ? '/admin.html' : p;
   if (file.startsWith('/vendor/three/')) {
     file = path.join(__dirname, 'node_modules', 'three', file.slice('/vendor/three/'.length));
     if (!file.startsWith(path.join(__dirname, 'node_modules', 'three'))) return json(res, 403, {});
