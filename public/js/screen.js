@@ -91,10 +91,14 @@ export class BigScreen {
       ${RULE(520, 'margin-top:30px')}
       <div class="hs-cd" style="margin-top:30px;display:none"><div style="font-size:16px;letter-spacing:9px;color:#c9a24a">MATCH BEGINS IN</div><div class="hs-cd-t" style="margin-top:8px;font-size:58px;font-weight:600;letter-spacing:8px;color:#ecd9a8;animation:hs-glow 2.4s ease-in-out infinite"></div></div>`;
     el.appendChild(card);
+    // 「我的螢幕」個人播放時的角標（3D 場景裡只用拉丁字）
+    const ptag = document.createElement('div'); ptag.style.cssText = 'position:absolute;left:22px;top:20px;padding:8px 16px 9px;border:1px solid rgba(224,189,106,.6);border-radius:3px;background:rgba(11,7,24,.72);color:#ecd9a8;font:600 17px Cinzel,serif;letter-spacing:5px;opacity:0;transition:opacity .6s;pointer-events:none';
+    ptag.innerHTML = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#e0bd6a;box-shadow:0 0 8px #e0bd6a;margin-right:12px;vertical-align:2px"></span>PERSONAL VIEW';
+    el.appendChild(ptag);
     const banner = document.createElement('div'); banner.className = 'hs-banner'; banner.style.opacity = '0';
     banner.innerHTML = 'MATCH BEGINS IN<b></b>';
     el.appendChild(banner);
-    this.el = { idle, holder, card, banner, title: card.querySelector('.hs-title'), sub: card.querySelector('.hs-sub'), cd: card.querySelector('.hs-cd'), cdT: card.querySelector('.hs-cd-t'), bannerT: banner.querySelector('b') };
+    this.el = { idle, holder, card, banner, ptag, title: card.querySelector('.hs-title'), sub: card.querySelector('.hs-sub'), cd: card.querySelector('.hs-cd'), cdT: card.querySelector('.hs-cd-t'), bannerT: banner.querySelector('b') };
 
     const obj = this.obj = new CSS3DObject(el);
     const nx = Math.sin(S.ry) * 0.01, nz = Math.cos(S.ry) * 0.01;
@@ -111,6 +115,8 @@ export class BigScreen {
     this.muted = true; this.volume = 100; this.fade = 1; this.fadeTimer = null; this.transId = 0;
     this.reported = {}; // seq -> 已回報片長
     this.onReport = null; // (msg) => 送給伺服器 { t:'dur'|'ended'|'err', seq, id, ... }
+    this.personal = null; this.pSeq = 0; // 「我的螢幕」：只在自己瀏覽器播放的影片（本機時鐘）
+    this.onPersonalEnd = null; // (reason) => 'match' | 'ended' | 'error' | 'admin'
     this.onSoundChange = null; // 按鈕必須依播放器確認的狀態顯示，不能只反映使用者意圖
     setInterval(() => this.updateCountdown(), 1000);
     this.loadAPI();
@@ -135,7 +141,7 @@ export class BigScreen {
         },
         onApiChange: () => this.disableCaptions(),
         onStateChange: (e) => this.onPlayerState(e.data),
-        onError: (e) => { const v = this.state; if (v) this.report({ t: 'err', seq: v.seq, id: v.id, code: e.data }); },
+        onError: (e) => { const v = this.state; if (!v) return; if (v.kind === 'personal') { this.endPersonal('error'); return; } this.report({ t: 'err', seq: v.seq, id: v.id, code: e.data }); },
         onAutoplayBlocked: () => { this.player.mute(); this.updateSound(); },
       },
     });
@@ -156,6 +162,7 @@ export class BigScreen {
     if (s === 1) this.disableCaptions();
     let cur = ''; try { cur = this.player.getVideoData()?.video_id; } catch (_) { }
     if (cur !== v.id) return;
+    if (v.kind === 'personal') { if (s === 0 && !v.live) this.endPersonal('ended'); return; } // 個人播放不回報伺服器
     if (s === 1 && !v.live && !this.reported[v.seq]) {
       // 第一次真的開始播放：回報片長（伺服器取第一個合理的回報，用來判斷何時換下一首）
       let d = 0, title = ''; try { d = this.player.getDuration(); title = this.player.getVideoData()?.title || ''; } catch (_) { }
@@ -169,6 +176,12 @@ export class BigScreen {
   // 伺服器的媒體狀態：{ mode, video, music:{ track, position, playing, seq, display… }, countdown, serverTime }
   setMedia(m) {
     this.media = { ...m, receivedAt: performance.now() };
+    // 比賽開始（直播或影片）或管理員操作了大螢幕：個人播放結束，切回大家的畫面
+    if (this.personal) {
+      const ha = m.hallAdmin, kicked = ha && this.pEpoch != null && ha.epoch !== this.pEpoch;
+      if (m.mode === 'match' || kicked) { this.personal = null; this.state = null; setTimeout(() => this.firePersonalEnd(m.mode === 'match' ? 'match' : 'admin'), 0); }
+    }
+    if (this.personal) { this.updateOverlay(); return; }
     let want = null;
     if (m.mode === 'match') { const v = m.video; want = { kind: 'match', id: v.id, live: !!v.live, playing: v.playing, position: v.position, seq: v.seq }; }
     else if (m.music && m.music.track) { const mu = m.music; want = { kind: 'music', id: mu.track.id, live: !!mu.track.live, playing: mu.playing, position: mu.position, seq: mu.seq, title: mu.track.title }; }
@@ -180,6 +193,53 @@ export class BigScreen {
     if (!this.ready) return;
     if (changed) this.transition(); else this.apply(false);
   }
+  // ===== 我的螢幕（個人播放）=====
+  // 只有在大廳音樂時可以用；p = { id, live, title, start }
+  personalAllowed() {
+    const m = this.media; if (!m || m.mode !== 'music') return { ok: false, why: 'match' };
+    const ha = m.hallAdmin, left = ha ? ha.lockUntil - this.serverNow() : 0;
+    if (left > 0) return { ok: false, why: 'admin', left };
+    return { ok: true };
+  }
+  setPersonal(p) {
+    if (!this.personalAllowed().ok) return false;
+    this.pEpoch = this.media.hallAdmin ? this.media.hallAdmin.epoch : 0;
+    this.personal = { id: p.id, live: !!p.live, title: p.title || '' };
+    this.state = { kind: 'personal', id: p.id, live: !!p.live, title: p.title || '', playing: true, position: Math.max(0, p.start || 0), seq: 'p' + (++this.pSeq), receivedAt: performance.now() };
+    this.updateOverlay();
+    if (!this.player) this.createPlayer();
+    if (this.ready) this.transition();
+    return true;
+  }
+  personalCtl(action, sec) {
+    const v = this.state; if (!v || v.kind !== 'personal') return;
+    const t = this.targetTime();
+    if (action === 'toggle') { v.playing = !v.playing; v.position = t; }
+    else if (action === 'seek') v.position = Math.max(0, sec);
+    else if (action === 'skip') v.position = Math.max(0, t + sec);
+    v.receivedAt = performance.now();
+    this.apply(true);
+  }
+  personalInfo() {
+    const v = this.state; if (!v || v.kind !== 'personal') return null;
+    let dur = 0; try { dur = this.ready ? this.player.getDuration() : 0; } catch (_) { }
+    return { id: v.id, title: v.title, live: v.live, playing: v.playing, time: v.live ? 0 : this.targetTime(), dur };
+  }
+  endPersonal(reason = 'user') {
+    if (!this.personal) return;
+    this.personal = null;
+    // 回到大家的畫面：用最後一次的伺服器狀態，加上經過的時間
+    const m = this.media;
+    if (m && m.mode) {
+      const dt = (performance.now() - m.receivedAt) / 1000;
+      const adv = (c) => (c && c.playing && !c.live ? { ...c, position: c.position + dt } : c);
+      const music = m.music ? { ...m.music, position: m.music.playing && m.music.track && !m.music.track.live ? m.music.position + dt : m.music.position } : m.music;
+      const { receivedAt, ...raw } = m;
+      this.setMedia({ ...raw, video: adv(m.video), music });
+    } else { this.state = null; this.updateOverlay(); }
+    this.firePersonalEnd(reason);
+  }
+  firePersonalEnd(reason) { try { this.onPersonalEnd && this.onPersonalEnd(reason); } catch (_) { } }
   // 觀影館的單一頻道：{ id, live, playing, position, seq, title, gain } 或 null
   setChannel(c) {
     this.media = null;
@@ -210,7 +270,8 @@ export class BigScreen {
   setState(v) { this.setMedia({ mode: 'match', video: v, music: null, countdown: null }); }
   updateOverlay() {
     const m = this.media, v = this.state, E = this.el;
-    const showCard = !!(v && v.kind === 'music' && m && m.music.display === 'card');
+    const showCard = !!(v && v.kind === 'music' && m && m.music && m.music.display === 'card');
+    E.ptag.style.opacity = v && v.kind === 'personal' ? '1' : '0';
     E.holder.style.opacity = v && !showCard ? '1' : '0';
     E.card.style.opacity = showCard ? '1' : '0';
     E.idle.style.opacity = v ? '0' : '1';

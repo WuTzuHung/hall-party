@@ -8,6 +8,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 const { filterChat } = require('./public/js/chat-filter.js');
+const { DEFAULT_CHANNELS, parseChannelInput, createChannels } = require('./channels.js');
 
 const PORT = Number(process.env.PORT || 3000);
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'changeme';
@@ -67,6 +68,8 @@ const defaults = {
   tlights: true, // 城牆觀影館的燈（同時視聽後台控制；關燈時只留牆上火把與壁爐）
   // 城牆區觀影館：兩台螢幕各自獨立的播放時鐘（同時視聽：A＝作品畫面、B＝實況）
   theater: { a: null, b: null }, // { id, live, title, playing, startedAt, pausedAt, dur, seq, gain }
+  // 「我的螢幕」頻道選單（觀眾個人播放用）：[{ id?, handle?, name, tag }]
+  channels: DEFAULT_CHANNELS,
 };
 let state = structuredClone(defaults);
 try {
@@ -78,6 +81,7 @@ try {
   if (typeof state.tlights !== 'boolean') state.tlights = true;
   if (!state.theater || typeof state.theater !== 'object') state.theater = { a: null, b: null };
   for (const k of ['a', 'b']) if (!state.theater[k] || !state.theater[k].id) state.theater[k] = null;
+  if (!Array.isArray(state.channels)) state.channels = structuredClone(DEFAULT_CHANNELS);
   if (state.music.index >= state.music.list.length) state.music.index = state.music.list.length ? 0 : -1;
 } catch (_) { /* 第一次啟動 */ }
 if (state.mode === 'music' && state.music.list.length && state.music.index < 0) startTrack(0);
@@ -152,11 +156,16 @@ function publicTheaterCh(c, now) {
   if (!c) return null;
   return { id: c.id, live: !!c.live, title: c.title || '', playing: !!c.playing, position: c.live ? 0 : theaterPos(c, now), seq: c.seq, gain: c.gain ?? 100, dur: c.dur || 0 };
 }
+// 管理員操作直播後台（大螢幕）時：所有觀眾的「我的螢幕」個人播放立刻結束，並鎖住一段時間（連續操作會延長）
+const HALL_LOCK_MS = Number(process.env.HALL_LOCK_MS || 60000);
+const hallAdmin = { epoch: 0, lockUntil: 0 };
+function touchHallAdmin() { hallAdmin.epoch++; hallAdmin.lockUntil = Date.now() + HALL_LOCK_MS; }
 function publicTheater() { const now = Date.now(); return { a: publicTheaterCh(state.theater.a, now), b: publicTheaterCh(state.theater.b, now) }; }
 function publicMedia() {
   const m = state.music, t = curTrack(), cd = state.countdown;
   return {
     theater: publicTheater(),
+    hallAdmin: { ...hallAdmin },
     mode: state.mode, serverTime: Date.now(),
     video: publicVideo(),
     music: {
@@ -177,6 +186,7 @@ function adminState() {
     countdown: state.countdown ? { ...state.countdown } : null,
     lights: state.lights, tlights: state.tlights,
     theater: publicTheater(),
+    channels: state.channels,
   };
 }
 function broadcastMedia() { broadcast({ t: 'media', m: publicMedia() }); }
@@ -360,6 +370,7 @@ function json(res, code, obj) {
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(obj));
 }
+const channels = createChannels({ onResolved: () => save() });
 const int = (v) => (Number.isInteger(Number(v)) ? Number(v) : NaN);
 
 const server = http.createServer(async (req, res) => {
@@ -371,6 +382,11 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { online: connectedCount(), queue: queue.length, max: state.maxUsers });
   }
   if (p === '/api/version' && req.method === 'GET') return json(res, 200, { version: VERSION });
+  // 「我的螢幕」頻道選單：各頻道最新影片（伺服器快取）
+  if (p === '/api/channels' && req.method === 'GET') {
+    try { return json(res, 200, { channels: await channels.list(state.channels) }); }
+    catch (e) { return json(res, 500, { error: '頻道清單暫時無法取得' }); }
+  }
 
   // ----- 管理員 API -----
   if (p.startsWith('/api/admin/')) {
@@ -379,6 +395,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method !== 'POST') return json(res, 405, { error: 'method' });
     if (p === '/api/admin/ticket') return json(res, 200, { ticket: signTicket() });
     const body = await readBody(req);
+    if (['/api/admin/video', '/api/admin/control', '/api/admin/music', '/api/admin/mode', '/api/admin/countdown'].includes(p)) touchHallAdmin();
     if (p === '/api/admin/lights') {
       // 室內燈：{ on: true|false } 或 { toggle: true }；zone: 'wall' 是城牆觀影館的燈（廣播 t:'tlights'），否則是殿堂（t:'lights'）；不動播放狀態
       const k = body.zone === 'wall' ? 'tlights' : 'lights';
@@ -525,6 +542,28 @@ const server = http.createServer(async (req, res) => {
           break;
         default: return json(res, 400, { error: 'unknown action' });
       }
+    } else if (p === '/api/admin/channels') {
+      // 我的螢幕頻道：add（頻道網址、@帳號、頻道 ID 或該頻道任一支影片網址）／remove／move／reset
+      const C = state.channels;
+      if (body.action === 'add') {
+        const spec = parseChannelInput(body.input);
+        if (!spec) return json(res, 400, { error: '請貼頻道網址、@帳號，或該頻道的影片網址' });
+        let info; try { info = await channels.resolve(spec); } catch (e) { return json(res, 400, { error: '找不到這個頻道：' + e.message }); }
+        if (C.some((c) => c.id === info.id)) return json(res, 400, { error: '這個頻道已經在清單裡了' });
+        if (C.length >= 8) return json(res, 400, { error: '最多 8 個頻道' });
+        const name = cleanText(body.name, 40) || cleanText(info.name, 40) || (await channels.feed(info.id)).name || info.id;
+        C.push({ id: info.id, name: cleanText(name, 40), tag: cleanText(body.tag, 12) });
+      } else if (body.action === 'remove') {
+        const i = int(body.index); if (!(i >= 0 && i < C.length)) return json(res, 400, { error: 'index' });
+        C.splice(i, 1);
+      } else if (body.action === 'move') {
+        const i = int(body.index), j = i + (body.dir < 0 ? -1 : 1);
+        if (!(i >= 0 && i < C.length && j >= 0 && j < C.length)) return json(res, 400, { error: 'index' });
+        [C[i], C[j]] = [C[j], C[i]];
+      } else if (body.action === 'reset') state.channels = structuredClone(DEFAULT_CHANNELS);
+      else return json(res, 400, { error: 'unknown action' });
+      save();
+      return json(res, 200, adminState());
     } else if (p === '/api/admin/mode') {
       if (body.mode === 'music') { if (state.mode !== 'music' || !curTrack()) backToMusic(); }
       else if (body.mode === 'match') { if (state.mode !== 'match') { state.mode = 'match'; state.video.seq = ++state.seq; } }
