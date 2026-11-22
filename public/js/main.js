@@ -3,7 +3,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildWorld, SPAWN, HALL, SCREEN } from './world.js';
 import { Avatar } from './avatar.js';
 import { BigScreen, ScreenLayer } from './screen.js';
-import { TSCREENS, TFOCUS, THEATER, inTheater } from './district.js';
+import { TSCREENS, TFOCUS, THEATER, inTheater, stepGates } from './district.js';
 import { tvLayout } from './tv-layout.js';
 import { initChat } from './chat.js';
 import { initAdminDock } from './admin-dock.js';
@@ -980,9 +980,15 @@ function updateVolume() {
   screen.setVolume(v * userVol / 100);
 }
 
+const GATE_PTS = [];
 function frame() {
   const dt = Math.min(0.05, clock.getDelta()); const t = clock.elapsedTime; const now = performance.now();
   for (const f of world.anim) f(t);
+  // 城門：依所有玩家的位置決定開關（每個人算出來的結果相同）
+  GATE_PTS.length = 0;
+  if (entered) GATE_PTS.push(me.pos);
+  for (const r of remotes.values()) GATE_PTS.push(r.av.root.position);
+  stepGates(dt, GATE_PTS, entered ? me.pos : null);
   if (entered) {
     updateMe(dt);
     me.avatar.root.position.set(me.pos.x, me.pos.y + (me.seat ? 0.55 : 0), me.pos.z);
