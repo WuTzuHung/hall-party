@@ -10,7 +10,7 @@ function storedPw() {
 
 export function initAdminDock({ toast, onFocus, isTouch }) {
   const dock = $('#admin-dock'), panel = $('#ad-panel');
-  let pw = '', media = null, active = false, open = false, lights = true, wall = false, thAt = 0;
+  let pw = '', media = null, active = false, open = false, lights = true, tlights = true, wall = false, thAt = 0;
   async function api(path, body) {
     const r = await fetch('/api/admin/' + path, {
       method: body ? 'POST' : 'GET', cache: 'no-store', credentials: 'same-origin',
@@ -45,12 +45,18 @@ export function initAdminDock({ toast, onFocus, isTouch }) {
     const m = st.mode ? { mode: st.mode, video: st.video, music: st.music, countdown: st.countdown, theater: st.theater } : st;
     if (m && m.mode) setMedia(m);
     if (typeof st.lights === 'boolean') setLights(st.lights);
+    if (typeof st.tlights === 'boolean') setTLights(st.tlights);
   }
   // 室內燈按鈕：燈開著時顯示「關燈」（亮金色），關著時顯示「開燈」（暗色）
-  function setLights(on) {
-    lights = !!on; const b = $('#ad-lights'); if (!b) return;
-    b.textContent = lights ? '💡 關燈' : '💡 開燈'; b.classList.toggle('off', !lights);
-    b.setAttribute('aria-pressed', String(lights)); b.title = '室內燈：' + (lights ? '開' : '關');
+  // 殿堂與觀影館各一顆燈光按鈕
+  function setLights(on) { lights = !!on; lightBtn(); }
+  function setTLights(on) { tlights = !!on; lightBtn(); }
+  function lightBtn() {
+    for (const [id, v, name, offTxt] of [['#ad-lights', lights, '室內燈：', '💡 關燈'], ['#ad-tlights', tlights, '觀影館的燈：', '💡 關燈（留火把）']]) {
+      const b = $(id); if (!b) continue;
+      b.textContent = v ? offTxt : '💡 開燈'; b.classList.toggle('off', !v);
+      b.setAttribute('aria-pressed', String(v)); b.title = name + (v ? '開' : '關');
+    }
   }
   function setMedia(m) {
     media = m; if (!active) return;
@@ -126,6 +132,7 @@ export function initAdminDock({ toast, onFocus, isTouch }) {
   $('#ad-next').addEventListener('click', () => act(() => api('music', { action: 'next' }), '下一首'));
   $('#ad-music').addEventListener('click', () => act(() => api('mode', { mode: 'music' }), '已回到大廳音樂'));
   $('#ad-lights').addEventListener('click', () => { const on = !lights; act(() => api('lights', { on }), on ? '室內燈已開' : '室內燈已關'); });
+  $('#ad-tlights').addEventListener('click', () => { const on = !tlights; act(() => api('lights', { on, zone: 'wall' }), on ? '觀影館的燈已開' : '觀影館已關燈（留下火把）'); });
   for (const b of document.querySelectorAll('.ad-cp')) b.addEventListener('click', () => {
     const k = b.dataset.k, c = thCh(k); if (!c) return;
     act(() => api('theater', { screen: k, action: c.playing ? 'pause' : 'play' }), `${thName(k)} 已${c.playing ? '暫停' : '播放'}`);
@@ -180,5 +187,5 @@ export function initAdminDock({ toast, onFocus, isTouch }) {
   });
 
   check();
-  return { setMedia, setLights, setZone, check, get active() { return active; } };
+  return { setMedia, setLights, setTLights, setZone, check, get active() { return active; } };
 }

@@ -647,6 +647,7 @@ function connect() {
       case 'seats': setSeatOcc(m.s); break;
       case 'gears': case 'gearOk': case 'gearNo': gear.onMsg(m); break;
       case 'lights': applyLights(m.on); break;
+      case 'tlights': applyTLights(m.on); break;
       case 'sitOk': break;
       case 'sitNo':
         if (me.seat && me.seat.i === Number(m.seat)) { standUp(); toast('這個位子有人坐了'); }
@@ -679,6 +680,8 @@ function onMedia(m) {
 }
 // 室內燈（管理員控制，伺服器同步）：記住最新值；world.setLights 由 world.js 提供（還沒有時先略過，之後 applyLights() 會補上）
 let lightsOn = true;
+// 城牆觀影館的燈（同時視聽後台控制）
+function applyTLights(on) { world?.setWallLights?.(!!on); dock?.setTLights?.(!!on); }
 function applyLights(on) {
   if (typeof on === 'boolean') lightsOn = on;
   document.body.classList.toggle('lights-off', !lightsOn);
@@ -699,7 +702,7 @@ function onWelcome(m) {
   previews.length = 0;
   setSeatOcc(m.seats);
   if (m.media) onMedia(m.media); else screen.setState(m.video);
-  applyLights(m.lights);
+  applyLights(m.lights); applyTLights(m.tlights !== false);
   for (const p of m.players) addRemote(p.id, p.c, p);
   if (firstEntry) {
     entered = true;

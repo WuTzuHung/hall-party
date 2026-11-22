@@ -45,6 +45,8 @@ const roofY = (z) => { // 屋頂下緣（室內天花）的高度
 let W; // world.js 提供的工具
 const FLAMES = []; // { s: sprite, base, ph, k }
 const SHEETS = []; // 會隨風擺動的旗幟
+// 觀影館吊燈的燭火：關燈時熄掉（牆上火把、壁爐照常燃燒）
+let LAMP = 1; const LAMP_GLOWS = [];
 // 立體機動裝置：勾錨可以釘上去、也站得上去的額外方塊（屋頂、觀影館），不參與一般走路碰撞
 export const HOOK_BOXES = [];
 // 裝備庫（外城廣場，第一道城門內側的城牆下）：六組立體機動裝置掛在牆上的木架
@@ -65,14 +67,17 @@ export function buildWallDistrict(api, scene, anim, q) {
   midTown(scene);
   innerYard(scene);
   armory(scene);
+  W.onLights((e) => { if (!W.zone.wall) return; LAMP = e; for (const g of LAMP_GLOWS) { g.material.opacity = 0.22 * e; g.visible = e > 0.02; } });
   theaterHooks();
   // 火光閃爍（只在城牆區時更新，省效能）
   anim.push((t) => {
     if (!W.zone.wall) return;
     for (const f of FLAMES) {
       const n = Math.sin(t * 11 * f.k + f.ph) * 0.5 + Math.sin(t * 23 * f.k + f.ph * 2) * 0.3 + Math.sin(t * 5.3 + f.ph) * 0.2;
-      f.s.scale.set(f.base[0] * (1 + n * 0.06), f.base[1] * (1 + n * 0.12), 1);
-      if (f.g) f.g.material.opacity = f.go * (0.85 + n * 0.15);
+      const lk = f.lamp ? LAMP : 1;
+      f.s.visible = lk > 0.02;
+      f.s.scale.set(f.base[0] * (1 + n * 0.06) * lk, f.base[1] * (1 + n * 0.12) * lk, 1);
+      if (f.g) { f.g.material.opacity = f.go * (0.85 + n * 0.15) * lk; f.g.visible = lk > 0.02; }
     }
     for (const sh of SHEETS) {
       const p = sh.g.attributes.position;
@@ -1063,15 +1068,15 @@ function theaterInterior(scene) {
       const a = k / 12 * Math.PI * 2, cx = x + Math.cos(a) * 1.5, cz = gz + Math.sin(a) * 1.5;
       W.cyl(0.07, 0.05, 0.05, cx, y + 0.04, cz, 'iron', 6);
       W.cyl(0.035, 0.035, 0.24, cx, y + 0.08, cz, 'wax', 6);
-      fire(scene, cx, y + 0.34, cz, 0.42, 0.9, 0.35);
+      fire(scene, cx, y + 0.34, cz, 0.42, 0.9, 0.35); FLAMES[FLAMES.length - 1].lamp = true;
     }
-    W.glow(scene, x, y + 0.4, gz, 5.5, 0xffb060, 0.22);
-    LIGHTS.push({ x, y: y - 0.3, z: gz, d: 22, off: [0xffa050, 22], on: [0xffd8a8, 70], flick: 0.4 });
+    LAMP_GLOWS.push(W.glow(scene, x, y + 0.4, gz, 5.5, 0xffb060, 0.22));
+    LIGHTS.push({ x, y: y - 0.3, z: gz, d: 22, off: [0xff8a40, 0], on: [0xffd8a8, 70], flick: 0.4 });
   }
   // 其他借用光源：壁爐、兩側火把、入口
   LIGHTS.push({ x: -117.5, y: 1.4, z: IN.z0 + 1.6, d: 14, off: [0xff7a2a, 30], on: [0xff8a3a, 26], flick: 1 });
-  LIGHTS.push({ x: -120, y: 4.4, z: IN.z1 - 1.0, d: 12, off: [0xff9040, 12], on: [0xffb070, 14], flick: 1 });
-  LIGHTS.push({ x: -110, y: 4.4, z: IN.z0 + 1.0, d: 12, off: [0xff9040, 12], on: [0xffb070, 14], flick: 1 });
+  LIGHTS.push({ x: -120, y: 4.4, z: IN.z1 - 1.0, d: 14, off: [0xff8a38, 22], on: [0xffb070, 14], flick: 1 });
+  LIGHTS.push({ x: -110, y: 4.4, z: IN.z0 + 1.0, d: 14, off: [0xff8a38, 22], on: [0xffb070, 14], flick: 1 });
   LIGHTS.push({ x: -103, y: 7, z: gz, d: 18, off: [0xffa060, 8], on: [0xffe0c0, 40], flick: 0 });
 
   // ---- 座位：螢幕前 7 排長椅（面向螢幕），後方兩張長餐桌 ----
