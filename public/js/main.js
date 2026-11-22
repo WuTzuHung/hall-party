@@ -8,6 +8,7 @@ import { tvLayout } from './tv-layout.js';
 import { initChat } from './chat.js';
 import { initAdminDock } from './admin-dock.js';
 import { initTravel } from './travel.js';
+import { initMyScreen } from './myscreen.js';
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -54,6 +55,7 @@ function updateZone() {
   const x = me.pos.x, w = zoneWall ? x < -68.5 : x < -69.5;
   if (w === zoneWall) return;
   zoneWall = w;
+  if (w) screen.endPersonal('zone'); // 我的螢幕只在殿堂裡
   if (!w && viewMode === 'flat') tvSet('hall');
   screen.setActive(!w); for (const t of tScreens) t.setActive(w);
   updateVolume(); updateSoundButton();
@@ -785,9 +787,15 @@ const chat = initChat({
   send: (text) => { if (!ws || ws.readyState !== 1 || !me.id) return false; ws.send(JSON.stringify({ t: 'chat', text })); return true; },
   onFocus: () => { clearKeys(); unlockPointer(); },
 });
+// 我的螢幕：大廳音樂時，觀眾可以在殿堂大螢幕播放只有自己看得到的影片
+const myScreen = initMyScreen({
+  screen, toast, isTouch, onFocus: () => { clearKeys(); unlockPointer(); },
+  wantSound: () => { if (!anySound()) setSound(true); },
+  inHall: () => !zoneWall,
+});
 // 管理員控制台（有存管理密碼且驗證成功才顯示）
 const dock = initAdminDock({ toast, onFocus: () => { clearKeys(); unlockPointer(); }, isTouch });
-onZone = (w) => dock.setZone(w); dock.setZone(zoneWall);
+onZone = (w) => { dock.setZone(w); myScreen.refresh(); }; dock.setZone(zoneWall);
 $('#btn-rechar').addEventListener('click', changeCharacter);
 // 傳送與回城（左上角小地圖）
 const travel = initTravel({

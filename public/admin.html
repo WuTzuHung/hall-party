@@ -158,6 +158,21 @@ body[data-ws=wall] .grid div,body[data-ws=wall] input[type=text],body[data-ws=wa
 }
 @media (prefers-reduced-motion:reduce){body,.ws-bar{transition:none}}
 </style>
+<style>
+/* 我的螢幕頻道 */
+.ch-list{list-style:none;margin:12px 0 4px;padding:0;border-radius:12px;background:#0f0a1f;overflow:hidden}
+.ch-list li{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.05)}
+.ch-list li:last-child{border-bottom:0}
+.ch-list .n{width:20px;text-align:right;color:var(--muted);font-size:12px;flex:none}
+.ch-list .t{flex:1;min-width:0}
+.ch-list .t b{display:block;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ch-list .t small{color:var(--muted);font-size:12px;word-break:break-all}
+.ch-list .tag{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:999px;font-size:11px;color:var(--gold);border:1px solid var(--line);vertical-align:1px}
+.ch-list button{padding:5px 9px;min-height:32px;font-size:12px;border-radius:8px}
+.ch-list button:disabled{opacity:.3;cursor:default}
+#ch-card button:disabled{opacity:.5}
+@media (max-width:560px){.ch-list li{flex-wrap:wrap}.ch-list .t{flex-basis:calc(100% - 30px)}.ch-list .acts{margin-left:30px}}
+</style>
 </head>
 <body><div class="wrap">
 <h1 id="brand">HALL DES LUMIÈRES</h1>
@@ -265,6 +280,16 @@ body[data-ws=wall] .grid div,body[data-ws=wall] input[type=text],body[data-ws=wa
   </div>
   <div id="mu-msg"></div>
   <!-- ===== /大廳音樂與開賽倒數 ===== -->
+  <!-- ===== 我的螢幕頻道（觀眾個人播放用） ===== -->
+  <div class="card" id="ch-card">
+    <h2>我的螢幕 · 內建頻道<small>觀眾個人播放的選片清單</small></h2>
+    <div class="muted">大廳音樂時，觀眾可以點「我的螢幕」在大螢幕播放只有自己看得到的影片。你在這個後台操作大螢幕（換片、播放、換歌、倒數）時，所有人的個人播放會立刻結束，並鎖住 60 秒；比賽期間也不能用。</div>
+    <ol id="ch-list" class="ch-list"></ol>
+    <label for="ch-in">新增頻道（頻道網址、@帳號，或該頻道任一支影片網址）</label>
+    <div class="row"><input type="text" id="ch-in" style="flex:2;min-width:200px" placeholder="https://www.youtube.com/@lolesportstw"><input type="text" id="ch-name" style="flex:1;min-width:120px" maxlength="40" placeholder="顯示名稱（選填）"><button id="ch-add">加入</button></div>
+    <div class="row" style="margin-top:10px;justify-content:space-between"><span id="ch-msg" class="muted" role="status" aria-live="polite"></span><button id="ch-reset" type="button">恢復預設三個頻道</button></div>
+  </div>
+  <!-- ===== /我的螢幕頻道 ===== -->
   <!-- ===== 室內燈光（獨立區塊） ===== -->
   <div class="card" id="lights-card">
     <h2>室內燈光</h2>
@@ -405,6 +430,7 @@ function render(st) {
   if (typeof st.lights === 'boolean' && window.renderLights) window.renderLights(st.lights);
   if (st.theater && window.renderTheater) window.renderTheater(st.theater);
   if (window.renderSummary) window.renderSummary(st);
+  if (st.channels && window.renderChannels) window.renderChannels(st.channels);
 }
 async function refresh() { const epoch = authEpoch; try { const st = await api('state'); if (epoch === authEpoch) render(st); } catch (e) { } }
 async function login() {
@@ -826,6 +852,56 @@ if (pw) login();
     const tc = q('#th-curl');
     if (tc && !tc.textContent) tc.textContent = `curl -X POST ${location.origin}/api/admin/theater -H "Authorization: Bearer <密碼>" -H "Content-Type: application/json" -d '{"screen":"both","action":"set","urlA":"https://youtu.be/作品ID","urlB":"https://youtu.be/實況ID"}'`;
   };
+})();
+</script>
+<script>
+// ===== 我的螢幕頻道 =====
+(() => {
+  const q = (s) => document.querySelector(s);
+  const auth = () => { try { return (typeof pw !== 'undefined' && pw) || localStorage.getItem('hall-admin') || sessionStorage.getItem('hall-admin') || ''; } catch (_) { return ''; } };
+  async function call(body) {
+    const r = await fetch('/api/admin/channels', { method: 'POST', cache: 'no-store', headers: { 'Authorization': 'Bearer ' + auth(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || r.status);
+    return j;
+  }
+  const say = (t, ok = true) => { const m = q('#ch-msg'); m.textContent = t; m.className = ok ? 'ok' : 'bad'; };
+  let last = '';
+  window.renderChannels = (list) => {
+    const key = JSON.stringify(list); if (key === last) return; last = key;
+    const ol = q('#ch-list'); ol.replaceChildren();
+    if (!list.length) { const li = document.createElement('li'); li.className = 'muted'; li.textContent = '沒有頻道：觀眾只能用貼網址'; ol.append(li); }
+    list.forEach((c, i) => {
+      const li = document.createElement('li');
+      const n = document.createElement('span'); n.className = 'n'; n.textContent = i + 1;
+      const t = document.createElement('div'); t.className = 't';
+      const b = document.createElement('b'); b.textContent = c.name || c.handle || c.id;
+      if (c.tag) { const g = document.createElement('span'); g.className = 'tag'; g.textContent = c.tag; b.append(g); }
+      const sm = document.createElement('small'); sm.textContent = c.handle ? '@' + c.handle : c.id;
+      t.append(b, sm);
+      const acts = document.createElement('span'); acts.className = 'acts row';
+      const mk = (txt, label, fn, dis) => { const x = document.createElement('button'); x.type = 'button'; x.textContent = txt; x.setAttribute('aria-label', label); x.disabled = !!dis; x.onclick = fn; return x; };
+      acts.append(
+        mk('↑', '上移：' + b.textContent, () => run({ action: 'move', index: i, dir: -1 }), i === 0),
+        mk('↓', '下移：' + b.textContent, () => run({ action: 'move', index: i, dir: 1 }), i === list.length - 1),
+        mk('移除', '移除：' + b.textContent, () => run({ action: 'remove', index: i }, '已移除')),
+      );
+      li.append(n, t, acts); ol.append(li);
+    });
+  };
+  async function run(body, ok, btn) {
+    if (btn) btn.disabled = true;
+    try { const st = await call(body); window.renderChannels(st.channels || []); if (ok) say(ok); return true; }
+    catch (e) { say('失敗：' + e.message, false); return false; }
+    finally { if (btn) btn.disabled = false; }
+  }
+  q('#ch-add').onclick = async () => {
+    const input = q('#ch-in').value.trim(); if (!input) return;
+    say('正在找這個頻道…');
+    if (await run({ action: 'add', input, name: q('#ch-name').value.trim() }, '已加入，觀眾下次打開「我的螢幕」就看得到', q('#ch-add'))) { q('#ch-in').value = ''; q('#ch-name').value = ''; }
+  };
+  q('#ch-in').addEventListener('keydown', (e) => { if (e.key === 'Enter') q('#ch-add').click(); });
+  q('#ch-reset').onclick = () => run({ action: 'reset' }, '已恢復預設頻道', q('#ch-reset'));
 })();
 </script>
 </body></html>
