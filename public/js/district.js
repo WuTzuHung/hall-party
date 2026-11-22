@@ -614,9 +614,9 @@ function greatWall(scene, G) {
   // 往上吊起的大城門（平時關著；有人走近時敲鐘、用鐵鍊整扇吊進牆裡）
   liftGate(scene, G);
   // 城門上方的石刻紋章（兩面）
-  for (const [fx, ry] of [[G.x1 + 0.03, Math.PI / 2], [G.x0 - 0.03, -Math.PI / 2]]) {
-    const m = new THREE.PlaneGeometry(5.2, 5.2); P(m, { x: fx, y: G.spring + r + 4.8, z: gz, ry }); add(m, 'crestStone');
-  }
+  { const m = new THREE.PlaneGeometry(5.2, 5.2); P(m, { x: G.x1 + 0.03, y: G.spring + r + 4.8, z: gz, ry: Math.PI / 2 }); add(m, 'crestStone'); }
+  // 城內側：這道城牆之名的女神浮雕（外：瑪利亞、中：羅塞、內：席娜）
+  wallRelief(scene, G.x0, G.spring + r + 5.6, gz, { outer: 'maria', middle: 'rose', inner: 'sina' }[G.key]);
   const plate = new THREE.Mesh(new THREE.PlaneGeometry(9, 1.1), new THREE.MeshStandardMaterial({ map: T.textTexture([G.label], { w: 2048, h: 250, font: '600 150px "Cinzel", serif', color: '#3d3a35', letter: 30, fit: 1900 }), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4, roughness: 0.9 }));
   plate.position.set(G.x1 + 0.04, G.spring + r + 1.75, gz); plate.rotation.y = Math.PI / 2; scene.add(plate);
   box(G.x1, G.spring + r + 1.05, gz - 5, G.x1 + 0.3, G.spring + r + 1.2, gz + 5, 'trim'); box(G.x1, G.spring + r + 2.35, gz - 5, G.x1 + 0.3, G.spring + r + 2.5, gz + 5, 'trim');
@@ -625,6 +625,52 @@ function greatWall(scene, G) {
   LIGHTS.push({ x: G.x0 - 2.5, y: 4.6, z: gz, d: 18, off: [0xff9a48, 34], on: [0xff9a48, 34], flick: 1 });
   // 城牆上懸掛的長旗（街道側，門樓兩側）
   for (const z of [Math.max(G.z0 + 2.2, G.gate0 - 14), Math.min(G.z1 - 2.2, G.gate1 + 14)]) hangBanner(scene, G.x1 + 0.2, top - 6, z, 3.2, Math.min(11, top * 0.3), Math.PI / 2, 'bannerG', 0.12);
+}
+
+// ---------- 三女神（瑪利亞／羅塞／席娜）：觀影館內的油畫、各道城門內側的大理石浮雕 ----------
+const WALL_NAMES = { maria: 'MARIA', rose: 'ROSE', sina: 'SINA' };
+const _tl = new THREE.TextureLoader();
+const artTex = (url, srgb = true) => { const t = _tl.load(url); if (srgb) t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; };
+// 名牌（黃銅底、刻字）
+function namePlate(text, w, h, ink = '#2a2116') {
+  return new THREE.MeshStandardMaterial({ map: T.textTexture([text], { w: 1024, h: 256, font: '600 150px "Cinzel", serif', color: ink, letter: 36, fit: 900 }), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4, roughness: 0.6 });
+}
+// 油畫：掛在 z = zw 的牆上（面向 -z），x 為中心
+function portrait(scene, x, zw, n) {
+  const w = 2.2, h = 3.3, yc = 4.9, f = 0.22, z = zw - 0.08;
+  const mat = new THREE.MeshStandardMaterial({ map: artTex(`/assets/wall-${n}.jpg`), roughness: 0.62, emissive: 0xffffff, emissiveIntensity: 0.16 });
+  mat.emissiveMap = mat.map;
+  const pic = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat); pic.position.set(x, yc, z - 0.06); pic.rotation.y = Math.PI; scene.add(pic);
+  // 鍍金畫框（兩層）＋背板
+  box(x - w / 2 - 0.05, yc - h / 2 - 0.05, z - 0.04, x + w / 2 + 0.05, yc + h / 2 + 0.05, zw, 'oakDark');
+  for (const [a, b] of [[f, 0.12], [0.07, 0.2]]) {
+    const o = a === f ? 0 : -0.03, zz = z - b;
+    box(x - w / 2 - a + o, yc + h / 2 + o, zz, x + w / 2 + a - o, yc + h / 2 + a - o, z, 'brass');
+    box(x - w / 2 - a + o, yc - h / 2 - a + o, zz, x + w / 2 + a - o, yc - h / 2 - o, z, 'brass');
+    box(x - w / 2 - a + o, yc - h / 2 + o, zz, x - w / 2 - o, yc + h / 2 - o, z, 'brass');
+    box(x + w / 2 + o, yc - h / 2 + o, zz, x + w / 2 + a - o, yc + h / 2 - o, z, 'brass');
+  }
+  // 名牌
+  box(x - 0.62, yc - h / 2 - f - 0.42, z - 0.06, x + 0.62, yc - h / 2 - f - 0.1, zw, 'brass');
+  const pl = new THREE.Mesh(new THREE.PlaneGeometry(1.15, 0.29), namePlate(WALL_NAMES[n], 1.15, 0.29)); pl.position.set(x, yc - h / 2 - f - 0.26, z - 0.07); pl.rotation.y = Math.PI; scene.add(pl);
+  // 畫上方的小畫燈（只有光暈）
+  box(x - 0.5, yc + h / 2 + f + 0.05, z - 0.5, x + 0.5, yc + h / 2 + f + 0.14, z - 0.06, 'brass');
+  W.glow(scene, x, yc + h / 2 + f - 0.05, z - 0.45, 1.4, 0xffd090, 0.35);
+}
+// 浮雕：城門內側（x = fx 的牆面，面向 -x），中心 (y, z)
+function wallRelief(scene, fx, y, z, n) {
+  const s = 4.8;
+  const mat = new THREE.MeshStandardMaterial({ map: artTex(`/assets/wall-${n}-relief.jpg`), normalMap: artTex(`/assets/wall-${n}-relief-n.jpg`, false), normalScale: new THREE.Vector2(0.9, 0.9), roughness: 0.85, emissive: 0xffffff, emissiveIntensity: 0.12 });
+  mat.emissiveMap = mat.map;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(s, s), mat); m.position.set(fx - 0.2, y, z); m.rotation.y = -Math.PI / 2; scene.add(m);
+  // 石框（外凸）與名牌
+  const t = 0.45, d = 0.35;
+  box(fx - d, y + s / 2, z - s / 2 - t, fx, y + s / 2 + t, z + s / 2 + t, 'trim');
+  box(fx - d, y - s / 2 - t, z - s / 2 - t, fx, y - s / 2, z + s / 2 + t, 'trim');
+  box(fx - d, y - s / 2, z - s / 2 - t, fx, y + s / 2, z - s / 2, 'trim');
+  box(fx - d, y - s / 2, z + s / 2, fx, y + s / 2, z + s / 2 + t, 'trim');
+  box(fx - 0.15, y - 0.01 - s / 2, z - s / 2, fx - 0.02, y + s / 2, z + s / 2, 'soot');
+  const pl = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.8), namePlate(WALL_NAMES[n], 3.2, 0.8, '#3d3a35')); pl.position.set(fx - d - 0.01, y - s / 2 - t / 2 - 0.02, z); pl.rotation.y = -Math.PI / 2; scene.add(pl);
 }
 
 // ---------- 吊門式城門 ----------
@@ -1203,7 +1249,9 @@ function theaterInterior(scene) {
   for (const x of [-110, -120, -130]) for (const [z, ry, nz] of [[IN.z0 + 0.12, 0, 1], [IN.z1 - 0.12, Math.PI, -1]]) {
     torch(scene, x, 4.3, z - nz * 0.1, 0, nz);
   }
-  for (const x of [-105, -115, -125]) for (const [z, ry] of [[IN.z0 + 0.36, 0], [IN.z1 - 0.36, Math.PI]]) if (!(x === -115 && z < gz)) hangBanner(scene, x, 5.5, z, 1.3, 3.4, ry, x === -115 ? 'bannerR' : 'bannerG', 0.015);
+  for (const x of [-105, -115, -125]) for (const [z, ry] of [[IN.z0 + 0.36, 0], [IN.z1 - 0.36, Math.PI]]) if (z < gz && x !== -115) hangBanner(scene, x, 5.5, z, 1.3, 3.4, ry, 'bannerG', 0.015);
+  // 南牆：三道城牆之名的女神肖像（原創古典油畫，靠螢幕依序是席娜、羅塞、瑪利亞）
+  for (const [x, n] of [[-127.5, 'sina'], [-117.5, 'rose'], [-107.5, 'maria']]) portrait(scene, x, IN.z1, n);
 
   // ---- 壁爐（北牆中央） ----
   {
