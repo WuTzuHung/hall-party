@@ -26,7 +26,7 @@ const vaultYAt = (x) => VAULT.spring + VAULT.rise * Math.pow(Math.max(0, 1 - Mat
 
 // ---------- 室內燈光狀態（開燈／關燈兩種樣貌，約 1.5 秒平滑過渡） ----------
 // hooks：每幀呼叫 fn(e, inside, t)。e：1 = 開燈、0 = 關燈（已緩動）；inside：相機在室內的程度（0 街上 ~ 1 大廳內）
-const LIGHT = { target: 1, k: 1, hooks: [], cam: new THREE.Vector3(0, 6, 26), lastT: null };
+const LIGHT = { target: 1, k: 1, hallT: 1, wallT: 1, zone: -1, hooks: [], cam: new THREE.Vector3(0, 6, 26), lastT: null }; // 殿堂與城牆觀影館各自一個開關
 const onLights = (fn) => LIGHT.hooks.push(fn);
 const lerp = (a, b, t) => a + (b - a) * t;
 const _c0 = new THREE.Color(), _c1 = new THREE.Color();
@@ -184,10 +184,13 @@ export function buildWorld(scene, renderer, q) {
     const nSky = ZONE.wall ? 0x8c9ad0 : night.sky, nGround = ZONE.wall ? 0x5c4c44 : night.ground, nI = ZONE.wall ? 0.95 : night.i;
     mixColor(hemi.color, 0x64548a, 0xfff2de, e).lerp(_c1.set(nSky), 1 - inside);
     mixColor(hemi.groundColor, 0x3c2832, 0xe9d9bd, e).lerp(_c1.set(nGround), 1 - inside);
-    hemi.intensity = lerp(nI, ZONE.wall ? lerp(0.22, 0.75, e) : lerp(0.2, 1.15, e), inside);
+    hemi.intensity = lerp(nI, ZONE.wall ? lerp(0.13, 0.75, e) : lerp(0.2, 1.15, e), inside);
   });
   const stepLights = (t) => {
     const dt = LIGHT.lastT === null ? 0 : Math.min(0.5, Math.max(0, t - LIGHT.lastT)); LIGHT.lastT = t;
+    const zw = LIGHT.cam.x < -69 ? 1 : 0;
+    LIGHT.target = zw ? LIGHT.wallT : LIGHT.hallT;
+    if (zw !== LIGHT.zone) { LIGHT.zone = zw; LIGHT.k = LIGHT.target; } // 換區（看不到另一區）：直接套用那一區的燈
     if (LIGHT.k !== LIGHT.target) LIGHT.k = LIGHT.k < LIGHT.target ? Math.min(LIGHT.target, LIGHT.k + dt / 1.5) : Math.max(LIGHT.target, LIGHT.k - dt / 1.5);
     const e = LIGHT.k * LIGHT.k * (3 - 2 * LIGHT.k);
     const c = LIGHT.cam;
@@ -198,10 +201,12 @@ export function buildWorld(scene, renderer, q) {
   anim.push(stepLights);
   stepLights(0);
   return {
-    walls, floors, seats, camBlock, anim, rings: district.rings,
+    walls, floors, seats, camBlock, anim, rings: district.rings, hooks: district.hooks,
     // on：true 開燈、false 關燈；instant：true 時不做過渡（例如剛連線時套用伺服器狀態）
-    setLights(on, instant = false) { LIGHT.target = on ? 1 : 0; if (instant) LIGHT.k = LIGHT.target; return LIGHT.target === 1; },
-    get lightsOn() { return LIGHT.target === 1; },
+    setLights(on, instant = false) { LIGHT.hallT = on ? 1 : 0; if (instant && !LIGHT.zone) LIGHT.k = LIGHT.hallT; return LIGHT.hallT === 1; },
+    setWallLights(on, instant = false) { LIGHT.wallT = on ? 1 : 0; if (instant && LIGHT.zone === 1) LIGHT.k = LIGHT.wallT; return LIGHT.wallT === 1; },
+    get lightsOn() { return LIGHT.hallT === 1; },
+    get wallLightsOn() { return LIGHT.wallT === 1; },
     get lightLevel() { return LIGHT.k; },
     get poster() { return POSTER; },
   };

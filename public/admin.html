@@ -108,6 +108,17 @@ input.dt{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(2
 </style>
 <style>
 /* 室內燈光 */
+#tlights-card .lt-row{display:flex;align-items:center;gap:14px}
+#tlights-card .lt-state{flex:1;min-width:0;font-size:15px}
+#tlights-card .lt-state b{font-size:20px;color:#cfe0c4;margin-left:4px}
+#tlights-card.off .lt-state b{color:var(--muted)}
+#tlt-switch{position:relative;display:inline-flex;align-items:center;gap:10px;padding:8px 16px 8px 8px;border-radius:999px;border:1px solid rgba(224,189,106,.55);background:rgba(224,189,106,.16);min-height:48px}
+#tlt-switch .knob{position:relative;width:52px;height:30px;border-radius:999px;background:linear-gradient(180deg,#f6dc95,#d4a748);box-shadow:0 0 14px rgba(224,189,106,.45);transition:background .25s,box-shadow .25s}
+#tlt-switch .knob::after{content:"";position:absolute;top:3px;left:25px;width:24px;height:24px;border-radius:50%;background:#1b1206;transition:left .25s}
+#tlights-card.off #tlt-switch{border-color:rgba(255,255,255,.16);background:#0a100c}
+#tlights-card.off #tlt-switch .knob{background:#2e3a30;box-shadow:none}
+#tlights-card.off #tlt-switch .knob::after{left:3px;background:#b3bfac}
+#tlt-switch:disabled{cursor:wait}
 #lights-card .lt-row{display:flex;align-items:center;gap:14px}
 #lights-card .lt-state{flex:1;min-width:0;font-size:15px}
 #lights-card .lt-state b{font-size:20px;color:var(--gold);margin-left:4px}
@@ -386,6 +397,15 @@ body[data-ws=wall] .grid div,body[data-ws=wall] input[type=text],body[data-ws=wa
     <div id="th-msg" role="status" aria-live="polite"></div>
   </div>
   <!-- ===== /城牆觀影館 ===== -->
+  <div class="card" id="tlights-card">
+    <h2>觀影館燈光</h2>
+    <div class="lt-row">
+      <div class="lt-state">目前<b id="tlt-state">開</b></div>
+      <button id="tlt-switch" type="button" role="switch" aria-checked="true" aria-label="觀影館的燈"><span class="knob" aria-hidden="true"></span><span id="tlt-label">關燈</span></button>
+    </div>
+    <div class="muted" style="margin-top:8px">關燈後吊燈的燭火熄滅，只留牆上火把與壁爐，適合看同時視聽；只影響城牆觀影館，殿堂的燈另外控制。</div>
+    <div id="tlt-msg" class="muted" role="status" aria-live="polite" style="margin-top:6px"></div>
+  </div>
   <div class="card">
     <h2>用指令控制觀影館（給 Claude 或自動化使用）</h2>
     <div class="muted">兩台同時開始（I、II 網址各一）：</div>
@@ -428,6 +448,7 @@ function render(st) {
   if (st.maxUsers) { $('#s-max').textContent = st.maxUsers; if (document.activeElement !== $('#max')) $('#max').value = st.maxUsers; }
   if (st.online !== undefined) { $('#s-online').textContent = st.online; $('#s-queue').textContent = st.queue; }
   if (typeof st.lights === 'boolean' && window.renderLights) window.renderLights(st.lights);
+  if (typeof st.tlights === 'boolean' && window.renderTLights) window.renderTLights(st.tlights);
   if (st.theater && window.renderTheater) window.renderTheater(st.theater);
   if (window.renderSummary) window.renderSummary(st);
   if (st.channels && window.renderChannels) window.renderChannels(st.channels);
@@ -684,6 +705,24 @@ if (pw) login();
 })();
 </script>
 <script>
+// ===== 觀影館燈光 =====
+(() => {
+  let on = true;
+  window.renderTLights = (v) => {
+    on = !!v;
+    document.querySelector('#tlights-card').classList.toggle('off', !on);
+    document.querySelector('#tlt-state').textContent = on ? '開' : '關（留火把）';
+    document.querySelector('#tlt-label').textContent = on ? '關燈' : '開燈';
+    document.querySelector('#tlt-switch').setAttribute('aria-checked', String(on));
+  };
+  const btn = document.querySelector('#tlt-switch'), say = (t, ok = true) => { const m = document.querySelector('#tlt-msg'); m.textContent = t; m.className = ok ? 'ok' : 'bad'; };
+  btn.onclick = async () => {
+    const want = !on; btn.disabled = true;
+    try { render(await api('lights', { on: want, zone: 'wall' })); say(want ? '觀影館的燈已開' : '觀影館已關燈，只留火把'); }
+    catch (e) { say('失敗：' + e.message, false); }
+    finally { btn.disabled = false; }
+  };
+})();
 // ===== 室內燈光 =====
 (() => {
   let on = true;
@@ -848,7 +887,7 @@ if (pw) login();
     if (st.lights === false) h += ' · 燈關';
     q('#sum-hall').textContent = h;
     const th = st.theater || {}, one = (k, n) => { const c = th[k]; return n + ' ' + (!c ? '—' : c.live ? '直播' : c.playing ? '▶' : '⏸'); };
-    q('#sum-wall').textContent = !th.a && !th.b ? '兩台都還沒設定' : one('a', 'I') + ' · ' + one('b', 'II');
+    q('#sum-wall').textContent = (!th.a && !th.b ? '兩台都還沒設定' : one('a', 'I') + ' · ' + one('b', 'II')) + (st.tlights === false ? ' · 燈關' : '');
     const tc = q('#th-curl');
     if (tc && !tc.textContent) tc.textContent = `curl -X POST ${location.origin}/api/admin/theater -H "Authorization: Bearer <密碼>" -H "Content-Type: application/json" -d '{"screen":"both","action":"set","urlA":"https://youtu.be/作品ID","urlB":"https://youtu.be/實況ID"}'`;
   };

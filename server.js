@@ -65,6 +65,7 @@ const defaults = {
   },
   countdown: null, // { at, id, start, live, title }
   lights: true, // 室內燈（管理員控制，所有人同步）
+  tlights: true, // 城牆觀影館的燈（同時視聽後台控制；關燈時只留牆上火把與壁爐）
   // 城牆區觀影館：兩台螢幕各自獨立的播放時鐘（同時視聽：A＝作品畫面、B＝實況）
   theater: { a: null, b: null }, // { id, live, title, playing, startedAt, pausedAt, dur, seq, gain }
   // 「我的螢幕」頻道選單（觀眾個人播放用）：[{ id?, handle?, name, tag }]
@@ -77,6 +78,7 @@ try {
   if (!Array.isArray(state.music.list)) state.music.list = [];
   if (state.mode !== 'match') state.mode = 'music';
   if (typeof state.lights !== 'boolean') state.lights = true;
+  if (typeof state.tlights !== 'boolean') state.tlights = true;
   if (!state.theater || typeof state.theater !== 'object') state.theater = { a: null, b: null };
   for (const k of ['a', 'b']) if (!state.theater[k] || !state.theater[k].id) state.theater[k] = null;
   if (!Array.isArray(state.channels)) state.channels = structuredClone(DEFAULT_CHANNELS);
@@ -182,7 +184,7 @@ function adminState() {
     mode: state.mode, serverTime: Date.now(), version: VERSION,
     music: { ...publicMedia().music, list: state.music.list.map(x => ({ id: x.id, title: x.title || '', live: !!x.live, dur: x.dur || 0 })) },
     countdown: state.countdown ? { ...state.countdown } : null,
-    lights: state.lights,
+    lights: state.lights, tlights: state.tlights,
     theater: publicTheater(),
     channels: state.channels,
   };
@@ -249,6 +251,10 @@ const players = new Map(); // id -> { id, uid, ws, color, name, x,y,z, ry, anim,
 const byUid = new Map(); // uid -> player
 const queue = []; // 等候進場的 ws（ws._prio 為 true 的排在前面）
 const seats = new Map(); // seatIndex -> player id（一人一椅，伺服器為準）
+// 立體機動裝置：城牆區裝備庫的六組裝備，一人最多借一組（伺服器為準）；離線（保留期過後）自動歸還
+const GEAR_MAX = 6;
+const ARMORY = { x: -75.6, z: 6.1 }; // 借用／歸還要站在裝備庫附近
+const gears = new Map(); // slot -> player id
 let nextId = 1;
 
 const connectedCount = () => { let n = 0; for (const p of players.values()) if (p.ws) n++; return n; };
@@ -279,6 +285,17 @@ function broadcastQueue() {
 }
 const seatList = () => [...seats.entries()];
 function broadcastSeats() { broadcast({ t: 'seats', s: seatList() }); }
+const gearList = () => [...gears.entries()];
+function broadcastGears() { broadcast({ t: 'gears', s: gearList() }); }
+function freeGearOf(id) { let c = false; for (const [i, pid] of gears) if (pid === id) { gears.delete(i); c = true; } return c; }
+const nearArmory = (p) => Math.hypot(p.x - ARMORY.x, p.z - ARMORY.z) < 7;
+// 位置訊息裡的裝備狀態：[旗標, 左勾 x,y,z, 右勾 x,y,z, 貼牆法線 nx, nz]
+function cleanGear(g) {
+  if (!Array.isArray(g) || !g.length || g.length > 9) return 0;
+  const out = [];
+  for (const v of g) { if (!Number.isFinite(v)) return 0; out.push(Math.round(Math.max(-400, Math.min(400, v)) * 100) / 100); }
+  return out;
+}
 function freeSeatsOf(id) {
   let changed = false;
   for (const [i, pid] of seats) if (pid === id) { seats.delete(i); changed = true; }
@@ -308,8 +325,8 @@ function admit(ws) {
   ws._playerId = p.id;
   send(ws, {
     t: 'welcome', id: p.id, name, serverTime: Date.now(), media: publicMedia(), video: publicVideo(), max: state.maxUsers,
-    token: signToken(uid), version: VERSION, seats: seatList(), lights: state.lights,
-    players: [...players.values()].filter(o => o.id !== p.id && o.ws).map(o => ({ id: o.id, c: o.color, n: o.name, x: o.x, y: o.y, z: o.z, ry: o.ry, a: o.anim })),
+    token: signToken(uid), version: VERSION, seats: seatList(), gears: gearList(), lights: state.lights, tlights: state.tlights,
+    players: [...players.values()].filter(o => o.id !== p.id && o.ws).map(o => ({ id: o.id, c: o.color, n: o.name, x: o.x, y: o.y, z: o.z, ry: o.ry, a: o.anim, g: o.g || 0 })),
   });
   broadcast({ t: 'join', id: p.id, c: p.color, n: name, x: p.x, y: p.y, z: p.z, ry: p.ry }, ws);
 }
@@ -328,6 +345,7 @@ function tryAdmitQueue() {
 function dropPlayer(p) {
   players.delete(p.id); if (byUid.get(p.uid) === p) byUid.delete(p.uid);
   if (freeSeatsOf(p.id)) broadcastSeats();
+  if (freeGearOf(p.id)) broadcastGears();
 }
 
 // ---------- HTTP ----------
@@ -379,12 +397,13 @@ const server = http.createServer(async (req, res) => {
     const body = await readBody(req);
     if (['/api/admin/video', '/api/admin/control', '/api/admin/music', '/api/admin/mode', '/api/admin/countdown'].includes(p)) touchHallAdmin();
     if (p === '/api/admin/lights') {
-      // 室內燈：{ on: true|false } 或 { toggle: true }；只廣播 { t:'lights', on }，不動播放狀態
-      if (body.toggle === true) state.lights = !state.lights;
-      else if (typeof body.on === 'boolean') state.lights = body.on;
+      // 室內燈：{ on: true|false } 或 { toggle: true }；zone: 'wall' 是城牆觀影館的燈（廣播 t:'tlights'），否則是殿堂（t:'lights'）；不動播放狀態
+      const k = body.zone === 'wall' ? 'tlights' : 'lights';
+      if (body.toggle === true) state[k] = !state[k];
+      else if (typeof body.on === 'boolean') state[k] = body.on;
       else return json(res, 400, { error: '請提供 on（true／false）或 toggle: true' });
       save();
-      broadcast({ t: 'lights', on: state.lights });
+      broadcast({ t: k, on: state[k] });
       return json(res, 200, adminState());
     }
     if (p === '/api/admin/theater') {
@@ -620,7 +639,7 @@ wss.on('connection', (ws) => {
     const p = playerOf(ws); if (!p) return;
     if (m.t === 'p') {
       const n = (v, lim) => (Number.isFinite(v) ? Math.max(-lim, Math.min(lim, v)) : 0);
-      p.x = n(m.x, 200); p.y = n(m.y, 50); p.z = n(m.z, 200); p.ry = n(m.ry, 20); p.anim = n(m.a, 10);
+      p.x = n(m.x, 400); p.y = n(m.y, 120); p.z = n(m.z, 400); p.ry = n(m.ry, 20); p.anim = n(m.a, 10); p.g = cleanGear(m.g);
       // 不是坐著的姿勢（a≠5）就代表離開椅子了
       if (!(p.anim > 4.5 && p.anim < 5.5) && freeSeatsOf(p.id)) broadcastSeats();
     } else if (m.t === 'sit') {
@@ -630,6 +649,16 @@ wss.on('connection', (ws) => {
       if (owner && owner !== p.id && players.has(owner)) return send(ws, { t: 'sitNo', seat: i });
       freeSeatsOf(p.id); seats.set(i, p.id);
       send(ws, { t: 'sitOk', seat: i }); broadcastSeats();
+    } else if (m.t === 'gear') {
+      // 借用（take: 格位）／歸還（ret）：都要站在裝備庫附近
+      if (!nearArmory(p)) return send(ws, { t: 'gearNo', why: 'far' });
+      if (m.ret) { const had = freeGearOf(p.id); send(ws, { t: 'gearOk', slot: -1 }); if (had) broadcastGears(); return; }
+      const i = int(m.take);
+      if (!(i >= 0 && i < GEAR_MAX)) return send(ws, { t: 'gearNo', why: 'bad' });
+      for (const [k, pid] of gears) if (pid === p.id) return send(ws, { t: 'gearOk', slot: k }); // 已經借了一組
+      const owner = gears.get(i);
+      if (owner && owner !== p.id && players.has(owner)) return send(ws, { t: 'gearNo', why: 'taken', slot: i });
+      gears.set(i, p.id); send(ws, { t: 'gearOk', slot: i }); broadcastGears();
     } else if (m.t === 'stand') {
       if (freeSeatsOf(p.id)) broadcastSeats();
     } else if (m.t === 'fx') {
@@ -713,7 +742,7 @@ function onMediaReport(m) {
 setInterval(() => {
   if (!players.size) return;
   const list = [];
-  for (const p of players.values()) if (p.ws) list.push([p.id, +p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2), +p.ry.toFixed(2), +p.anim.toFixed(2)]);
+  for (const p of players.values()) if (p.ws) { const e = [p.id, +p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2), +p.ry.toFixed(2), +p.anim.toFixed(2)]; if (p.g) e.push(p.g); list.push(e); }
   broadcast({ t: 's', p: list, n: list.length });
 }, TICK_MS);
 // 心跳：每 2 秒 ping 一次，超過 11 秒沒有任何回應（pong 或訊息）就視為斷線（分頁被直接關掉、網路中斷時不會留下幽靈角色）
