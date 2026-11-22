@@ -179,7 +179,7 @@ export class BigScreen {
     // 比賽開始（直播或影片）或管理員操作了大螢幕：個人播放結束，切回大家的畫面
     if (this.personal) {
       const ha = m.hallAdmin, kicked = ha && this.pEpoch != null && ha.epoch !== this.pEpoch;
-      if (m.mode === 'match' || kicked) { this.personal = null; this.updateOverlay(); this.firePersonalEnd(m.mode === 'match' ? 'match' : 'admin'); }
+      if (m.mode === 'match' || kicked) { this.personal = null; this.state = null; setTimeout(() => this.firePersonalEnd(m.mode === 'match' ? 'match' : 'admin'), 0); }
     }
     if (this.personal) { this.updateOverlay(); return; }
     let want = null;
