@@ -78,9 +78,9 @@ export function initAdminDock({ toast, onFocus, isTouch }) {
     w = !!w; if (w === wall) return; wall = w;
     dock.classList.toggle('wall', w);
     $('#ad-hall').classList.toggle('hidden', w); $('#ad-th').classList.toggle('hidden', !w);
-    $('#ad-title').textContent = w ? '觀影館控制' : '大螢幕控制';
+    $('#ad-title').textContent = w ? '同時視聽控制' : '直播控制';
     $('#ad-panel').setAttribute('aria-label', w ? '城牆觀影館控制' : '大螢幕控制');
-    if (w) { $('#ad-mode').textContent = 'I + II'; $('#ad-mode-mini').textContent = '觀影館'; dock.classList.remove('match'); renderTheater(); }
+    if (w) { $('#ad-mode').textContent = 'I + II'; $('#ad-mode-mini').textContent = '同時視聽'; dock.classList.remove('match'); renderTheater(); }
     else if (media) setMedia(media);
   }
   const thCh = (k) => (media && media.theater && media.theater[k]) || null;
@@ -171,7 +171,7 @@ export function initAdminDock({ toast, onFocus, isTouch }) {
       $('#ad-pw').value = ''; $('#ad-login').classList.add('hidden');
       show(); render(st); setOpen(true);
       $('#help').classList.add('hidden');
-      toast && toast(wall ? '已登入管理員 · 右下角是觀影館控制台' : '已登入管理員 · 右下角是大螢幕控制台');
+      toast && toast(wall ? '已登入管理員 · 右下角是同時視聽控制台' : '已登入管理員 · 右下角是直播控制台');
     } catch (err) { pw = ''; $('#ad-login-msg').textContent = err.status === 401 ? '密碼錯誤' : '無法連線'; }
   });
   $('#btn-admin-logout').addEventListener('click', () => {
