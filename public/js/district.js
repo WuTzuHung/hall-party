@@ -45,6 +45,13 @@ const roofY = (z) => { // 屋頂下緣（室內天花）的高度
 let W; // world.js 提供的工具
 const FLAMES = []; // { s: sprite, base, ph, k }
 const SHEETS = []; // 會隨風擺動的旗幟
+// 立體機動裝置：勾錨可以釘上去、也站得上去的額外方塊（屋頂、觀影館），不參與一般走路碰撞
+export const HOOK_BOXES = [];
+// 裝備庫（外城廣場，第一道城門內側的城牆下）：六組立體機動裝置掛在牆上的木架
+export const ARMORY = {
+  x0: -77.4, x1: -73.6, z0: 2.1, z1: 10.2, stand: { x: -75.6, z: 6.1 },
+  slots: Array.from({ length: 6 }, (_, i) => ({ x: -73.92, y: 2.0, z: 3.35 + i * 1.1, ry: -Math.PI / 2 })),
+};
 
 export function buildWallDistrict(api, scene, anim, q) {
   W = api;
@@ -57,6 +64,8 @@ export function buildWallDistrict(api, scene, anim, q) {
   plaza(scene);
   midTown(scene);
   innerYard(scene);
+  armory(scene);
+  theaterHooks();
   // 火光閃爍（只在城牆區時更新，省效能）
   anim.push((t) => {
     if (!W.zone.wall) return;
@@ -71,7 +80,7 @@ export function buildWallDistrict(api, scene, anim, q) {
       p.needsUpdate = true; sh.g.computeVertexNormals();
     }
   });
-  return { lights: LIGHTS, rings: RINGS.map((R) => ({ x: RC.x, z: RC.z, R: R.R, L: R.L, h: R.h, t: RING_T / 2 + RING_FOOT })), ral: { x: TFOCUS.x + 0.25, y: TFOCUS.y, z: TFOCUS.z, w: TFOCUS.w, h: TFOCUS.h } };
+  return { lights: LIGHTS, rings: RINGS.map((R) => ({ x: RC.x, z: RC.z, R: R.R, L: R.L, h: R.h, t: RING_T / 2 + RING_FOOT, top: RING_T / 2, gx0: R.x0, gx1: R.x1 })), hooks: HOOK_BOXES, ral: { x: TFOCUS.x + 0.25, y: TFOCUS.y, z: TFOCUS.z, w: TFOCUS.w, h: TFOCUS.h } };
 }
 
 // ---------- 材質 ----------
@@ -383,6 +392,56 @@ function innerYard(scene) {
   }
 }
 
+// 觀影館：屋身與兩坡屋頂（沿 z 方向往中央升高）的勾錨方塊
+function theaterHooks() {
+  const T_ = THEATER, half = (T_.z1 - T_.z0) / 2;
+  HOOK_BOXES.push({ x0: T_.x0, x1: T_.x1, z0: T_.z0, z1: T_.z1, y0: 0, y1: T_.eave });
+  for (let k = 1; k <= 5; k++) { const d = half * k / 6; HOOK_BOXES.push({ x0: T_.x0, x1: T_.x1, z0: T_.z0 + d, z1: T_.z1 - d, y0: T_.eave, y1: T_.eave + (T_.ridge - T_.eave) * k / 6 }); }
+}
+// 裝備庫：靠在城牆內側的木造棚架，六組裝備掛在木板牆上（裝備本身由 odm.js 依借用狀態顯示）
+function armory(scene) {
+  const A = ARMORY, xw = -73.4, z0 = 2.7, z1 = 9.5, xf = -76.0, SP = 1.1;
+  // 背板：直向木板＋上下橫檔＋分隔立柱
+  box(xw - 0.14, 0.15, z0 + 0.1, xw, 3.45, z1 - 0.1, 'oak');
+  for (const y of [0.4, 1.35, 3.2]) box(xw - 0.22, y, z0 + 0.1, xw - 0.14, y + 0.16, z1 - 0.1, 'oakDark');
+  for (let i = 0; i <= 6; i++) { const z = A.slots[0].z - SP / 2 + i * SP; box(xw - 0.24, 0.15, z - 0.06, xw - 0.14, 3.45, z + 0.06, 'oakDark'); }
+  // 掛鉤橫桿（鐵）與每格的鐵鉤、黃銅編號牌
+  box(xw - 0.3, 2.5, z0 + 0.2, xw - 0.22, 2.58, z1 - 0.2, 'iron');
+  A.slots.forEach((sl, i) => {
+    const pg = new THREE.CylinderGeometry(0.025, 0.025, 0.34, 6); P(pg, { x: xw - 0.39, y: 2.6, z: sl.z, rz: Math.PI / 2 }); add(pg, 'iron');
+    const tp = new THREE.CylinderGeometry(0.025, 0.025, 0.12, 6); P(tp, { x: xw - 0.55, y: 2.65, z: sl.z }); add(tp, 'iron');
+    box(xw - 0.2, 0.95, sl.z - 0.16, xw - 0.18, 1.18, sl.z + 0.16, 'brass');
+    for (let k = 0; k <= i % 3; k++) { const dz = (k - (i % 3) / 2) * 0.06; box(xw - 0.215, 0.99, sl.z + dz - 0.012, xw - 0.205, 1.14, sl.z + dz + 0.012, 'soot'); }
+  });
+  // 下層：備用瓦斯罐的木架（橫放三排）
+  box(xw - 0.75, 0.62, z0 + 0.15, xw - 0.14, 0.7, z1 - 0.15, 'oak');
+  for (let j = 0; j < 9; j++) for (let r = 0; r < 2; r++) {
+    const z = z0 + 0.6 + j * 0.74, x = xw - 0.3 - r * 0.24;
+    const c = new THREE.CylinderGeometry(0.1, 0.1, 0.55, 12); P(c, { x, y: 0.81, z, rz: Math.PI / 2 }); add(c, 'iron');
+    const cap = new THREE.CylinderGeometry(0.06, 0.08, 0.05, 10); P(cap, { x: x - 0.3, y: 0.81, z, rz: Math.PI / 2 }); add(cap, 'brass');
+  }
+  // 前方兩根立柱＋橫樑＋斜屋頂（靠牆那端較高）
+  for (const z of [z0 - 0.25, z1 + 0.25]) { box(xf - 0.12, 0.15, z - 0.12, xf + 0.12, 4.1, z + 0.12, 'oakDark'); box(xf - 0.2, 0.15, z - 0.2, xf + 0.2, 0.45, z + 0.2, 'hStone'); W.walls.push({ x0: xf - 0.2, x1: xf + 0.2, z0: z - 0.2, z1: z + 0.2, y0: 0, y1: 3.5 }); }
+  box(xf - 0.16, 3.92, z0 - 0.45, xf + 0.16, 4.18, z1 + 0.45, 'oakDark');
+  const run = -72 - (xf - 0.5), fall = 1.0, ang = Math.atan2(fall, run), len = Math.hypot(run, fall);
+  const rf = new THREE.BoxGeometry(len + 0.1, 0.14, z1 - z0 + 1.3); P(rf, { x: (-72 + xf - 0.5) / 2, y: 4.25 + fall / 2 + 0.05, z: (z0 + z1) / 2, rz: -ang }); add(rf, 'roofWood');
+  for (let z = z0 - 0.3; z <= z1 + 0.31; z += 1.35) { const b = new THREE.BoxGeometry(len, 0.12, 0.1); P(b, { x: (-72 + xf - 0.5) / 2, y: 4.12 + fall / 2, z, rz: -ang }); add(b, 'oakDark'); }
+  // 招牌：立體機動裝置／ZEUGHAUS（面向廣場）
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 0.78), new THREE.MeshStandardMaterial({ map: T.textTexture([{ t: '立體機動裝置', font: '700 150px "Noto Serif TC", "PMingLiU", serif' }], { w: 1536, h: 330, font: '700 150px "Noto Serif TC", serif', color: '#ecd9a6', letter: 26, bg: '#3a2617', border: '#b8954a', fit: 1380 }), roughness: 0.85 }));
+  sign.position.set(xw - 0.26, 3.72, (z0 + z1) / 2); sign.rotation.y = -Math.PI / 2; scene.add(sign);
+  box(xw - 0.24, 3.3, (z0 + z1) / 2 - 1.9, xw - 0.18, 4.14, (z0 + z1) / 2 + 1.9, 'oakDark');
+  // 吊燈籠
+  const lx = xf + 0.35, lz = (z0 + z1) / 2;
+  box(lx - 0.02, 3.4, lz - 0.02, lx + 0.02, 3.92, lz + 0.02, 'iron');
+  box(lx - 0.17, 2.95, lz - 0.17, lx + 0.17, 3.4, lz + 0.17, 'glassHouse');
+  W.glow(scene, lx, 3.18, lz, 2.6, 0xffc070, 0.6);
+  LIGHTS.push({ x: lx, y: 3.1, z: lz, d: 16, off: [0xffb46a, 30], on: [0xffb46a, 30], flick: 0.2 });
+  // 旁邊的木桶與木箱
+  barrel(-74.8, 0.15, 1.5); crate(-75.6, 0.15, 1.2, 0.8, 0.2);
+  // 碰撞：棚架本體
+  W.walls.push({ x0: -74.2, x1: -72, z0: z0, z1: z1, y0: 0, y1: 3.5 });
+}
+
 // 外城與中城的田野：麥田、草垛、樹、木柵欄、農舍（三圈之間空著的地方）
 function countryside(scene) {
   const C = RC, rng = mulberry(7);
@@ -501,7 +560,7 @@ function greatWall(scene, G) {
       box(G.x1 + 3.98, y + 0.7, (z0 + z1) / 2 - 0.4, G.x1 + 4.02, y + 0.85, (z0 + z1) / 2 + 0.4, 'soot');
     }
     for (const y of [14, 27]) box(G.x1 + 4, y, z0, G.x1 + 4.35, y + 0.55, z1, 'trim');
-    W.walls.push({ x0: G.x1, x1: G.x1 + 4, z0, z1, y0: 0, y1: 60 });
+    W.walls.push({ x0: G.x1, x1: G.x1 + 4, z0, z1, y0: 0, y1: 60, ghost: true });
     // 門樓頂端外挑的木造防禦廊
     box(G.x1 + 4, top + 2.4, z0 - 0.3, G.x1 + 5.4, top + 5.2, z1 + 0.3, 'oakDark');
     for (let z = z0; z <= z1 + 0.01; z += (z1 - z0) / 3) box(G.x1 + 4, top + 2.0, z - 0.12, G.x1 + 5.5, top + 2.4, z + 0.12, 'oak');
@@ -620,6 +679,8 @@ function house(scene, x0, x1, zf, dir, h, i) {
   W.camBlock.push({ x0, x1, z0: za2, z1: zb2, y0: gf, y1: h });
   // 山牆（三角形）＋陡峭屋頂
   const pitch = 1.05, rise = (w / 2) * Math.tan(pitch);
+  // 立體機動裝置用：陡峭屋頂以階梯方塊近似（勾得到、站得上去）
+  for (let k = 1; k <= 3; k++) HOOK_BOXES.push({ x0: x0 + k * w / 8, x1: x1 - k * w / 8, z0: za2, z1: zb2, y0: h, y1: h + (k * w / 8) * Math.tan(pitch) });
   {
     const tri = new THREE.Shape([new THREE.Vector2(-w / 2, 0), new THREE.Vector2(w / 2, 0), new THREE.Vector2(0, rise)]);
     const g = new THREE.ExtrudeGeometry(tri, { depth: zb2 - za2, bevelEnabled: false }); g.translate(cx, h, za2); add(g, plaster);
@@ -822,7 +883,7 @@ function theaterHall(scene) {
       const ax = x + Math.cos(a) * (R + 0.02), az = z + Math.sin(a) * (R + 0.02) * (z < 15 ? -1 : 1) * -1;
       add(P(new THREE.BoxGeometry(0.06, 1.3, 0.28), { x: ax, y: y + 0.65, z: az, ry: -a * (z < 15 ? -1 : 1) }), 'glassLit');
     }
-    W.walls.push({ x0: x - R, x1: x + R, z0: z - R, z1: z + R, y0: 0, y1: 30 });
+    W.walls.push({ x0: x - R, x1: x + R, z0: z - R, z1: z + R, y0: 0, y1: 30, ghost: true });
     W.camBlock.push({ x0: x - R * 0.8, x1: x + R * 0.8, z0: z - R * 0.8, z1: z + R * 0.8, y0: 0, y1: 28 });
   }
   // 羅馬式大門：三層退縮的拱圈、門框、敞開的鐵件木門
@@ -854,10 +915,10 @@ function theaterHall(scene) {
   hangBanner(scene, H.x1 + 0.35, 10.0, gz + 4.6, 1.7, 5.6, Math.PI / 2, 'bannerG', 0.04);
   torch(scene, H.x1, 3.6, gz - 3.3, 1, 0); torch(scene, H.x1, 3.6, gz + 3.3, 1, 0);
   // 碰撞：牆身（門留開口）
-  W.walls.push({ x0: H.x0, x1: H.x0 + t, z0: H.z0, z1: H.z1, y0: 0, y1: 30 });
-  W.walls.push({ x0: H.x0, x1: H.x1, z0: H.z0, z1: H.z0 + t, y0: 0, y1: 30 });
-  W.walls.push({ x0: H.x0, x1: H.x1, z0: H.z1 - t, z1: H.z1, y0: 0, y1: 30 });
-  W.walls.push({ x0: H.x1 - t, x1: H.x1, z0: H.z0, z1: door.z0, y0: 0, y1: 30 });
+  W.walls.push({ x0: H.x0, x1: H.x0 + t, z0: H.z0, z1: H.z1, y0: 0, y1: 30, ghost: true });
+  W.walls.push({ x0: H.x0, x1: H.x1, z0: H.z0, z1: H.z0 + t, y0: 0, y1: 30, ghost: true });
+  W.walls.push({ x0: H.x0, x1: H.x1, z0: H.z1 - t, z1: H.z1, y0: 0, y1: 30, ghost: true });
+  W.walls.push({ x0: H.x1 - t, x1: H.x1, z0: H.z0, z1: door.z0, y0: 0, y1: 30, ghost: true });
   W.walls.push({ x0: H.x1 - t, x1: H.x1, z0: door.z1, z1: H.z1, y0: 0, y1: 30 });
   W.walls.push({ x0: H.x1 - t - 2.1, x1: H.x1 - t, z0: door.z0 - 0.2, z1: door.z0 + 0.05, y0: 0, y1: 6 }, { x0: H.x1 - t - 2.1, x1: H.x1 - t, z0: door.z1 - 0.05, z1: door.z1 + 0.2, y0: 0, y1: 6 });
   for (const c of [[H.x0, H.x0 + t, H.z0, H.z1], [H.x0, H.x1, H.z0, H.z0 + t], [H.x0, H.x1, H.z1 - t, H.z1], [H.x1 - t, H.x1, H.z0, door.z0], [H.x1 - t, H.x1, door.z1, H.z1]]) W.camBlock.push({ x0: c[0], x1: c[1], z0: c[2], z1: c[3], y0: 0, y1: 30 });
