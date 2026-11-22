@@ -48,6 +48,7 @@ const tScreens = TSCREENS.map((c, i) => {
 });
 const allScreens = [screen, ...tScreens];
 const anySound = () => allScreens.some((x) => x.isSoundOn());
+let onZone = null;
 let zoneWall = false; // 玩家在城牆區：只播觀影館兩台；否則只播殿堂大螢幕
 function updateZone() {
   const x = me.pos.x, w = zoneWall ? x < -68.5 : x < -69.5;
@@ -56,6 +57,7 @@ function updateZone() {
   if (!w && viewMode === 'flat') tvSet('hall');
   screen.setActive(!w); for (const t of tScreens) t.setActive(w);
   updateVolume(); updateSoundButton();
+  if (onZone) onZone(w); // 管理員控制台切換成觀影館／殿堂功能
 }
 // 目前要看的螢幕（坐下視角、最佳視角、全螢幕用）：{ x, y, z, w, h, ry }，ry 為螢幕面向（0 = 朝 +z）
 const focusScreen = () => (zoneWall ? { ...TFOCUS, ry: Math.PI / 2 } : { x: SCREEN.x, y: SCREEN.y, z: SCREEN.z, w: SCREEN.w, h: SCREEN.h, ry: 0 });
@@ -785,6 +787,7 @@ const chat = initChat({
 });
 // 管理員控制台（有存管理密碼且驗證成功才顯示）
 const dock = initAdminDock({ toast, onFocus: () => { clearKeys(); unlockPointer(); }, isTouch });
+onZone = (w) => dock.setZone(w); dock.setZone(zoneWall);
 $('#btn-rechar').addEventListener('click', changeCharacter);
 // 傳送與回城（左上角小地圖）
 const travel = initTravel({

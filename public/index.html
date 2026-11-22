@@ -75,23 +75,42 @@
   </div>
   <div id="admin-dock" class="hidden">
     <div id="ad-panel" role="group" aria-label="大螢幕控制">
-      <div class="ad-head"><span class="ad-title">大螢幕控制</span><span id="ad-mode" class="ad-mode">音樂</span><button id="ad-close" type="button" aria-label="收合">✕</button></div>
-      <div id="ad-now" class="ad-now"></div>
-      <div class="ad-row">
-        <button id="ad-play" type="button" aria-label="播放／暫停"></button>
-        <button id="ad-back" type="button">−10 秒</button>
-        <button id="ad-fwd" type="button">+10 秒</button>
-        <button id="ad-next" type="button">下一首</button>
+      <div class="ad-head"><span class="ad-title" id="ad-title">大螢幕控制</span><span id="ad-mode" class="ad-mode">音樂</span><button id="ad-close" type="button" aria-label="收合">✕</button></div>
+      <div id="ad-hall">
+        <div id="ad-now" class="ad-now"></div>
+        <div class="ad-row">
+          <button id="ad-play" type="button" aria-label="播放／暫停"></button>
+          <button id="ad-back" type="button">−10 秒</button>
+          <button id="ad-fwd" type="button">+10 秒</button>
+          <button id="ad-next" type="button">下一首</button>
+        </div>
+        <div class="ad-row2">
+          <button id="ad-music" type="button">回到大廳音樂</button>
+          <button id="ad-lights" type="button" aria-pressed="true" title="室內燈：開">💡 關燈</button>
+        </div>
+        <form id="ad-form" autocomplete="off">
+          <input id="ad-url" type="text" placeholder="YouTube 網址" spellcheck="false" enterkeyhint="go" aria-label="YouTube 網址">
+          <label class="ad-live"><input id="ad-live" type="checkbox"> 直播</label>
+          <button type="submit" class="ad-go">播到大螢幕</button>
+        </form>
       </div>
-      <div class="ad-row2">
-        <button id="ad-music" type="button">回到大廳音樂</button>
-        <button id="ad-lights" type="button" aria-pressed="true" title="室內燈：開">💡 關燈</button>
+      <div id="ad-th" class="hidden">
+        <div class="ad-ch" data-k="a"><span class="ad-k">I</span><span class="ad-ct">尚未設定</span><span class="ad-cs"></span><button type="button" class="ad-cp" data-k="a" aria-label="I 播放／暫停"></button></div>
+        <div class="ad-ch" data-k="b"><span class="ad-k">II</span><span class="ad-ct">尚未設定</span><span class="ad-cs"></span><button type="button" class="ad-cp" data-k="b" aria-label="II 播放／暫停"></button></div>
+        <div class="ad-delta" id="ad-delta"></div>
+        <div class="ad-row ad-row-th">
+          <button id="ad-tboth" type="button">同時暫停</button>
+          <button id="ad-trestart" type="button">兩台從頭</button>
+          <button id="ad-tbm" type="button" title="螢幕 II 往回 0.5 秒">II −0.5</button>
+          <button id="ad-tbp" type="button" title="螢幕 II 往前 0.5 秒">II +0.5</button>
+        </div>
+        <form id="ad-tform" autocomplete="off">
+          <input id="ad-turl" type="text" placeholder="YouTube 網址" spellcheck="false" enterkeyhint="go" aria-label="觀影館 YouTube 網址">
+          <div class="ad-seg" role="radiogroup" aria-label="播到哪一台"><label><input type="radio" name="ad-tk" value="a" checked><span>I</span></label><label><input type="radio" name="ad-tk" value="b"><span>II</span></label></div>
+          <label class="ad-live"><input id="ad-tlive" type="checkbox"> 直播</label>
+          <button type="submit" class="ad-go" id="ad-tgo">播到 I</button>
+        </form>
       </div>
-      <form id="ad-form" autocomplete="off">
-        <input id="ad-url" type="text" placeholder="YouTube 網址" spellcheck="false" enterkeyhint="go" aria-label="YouTube 網址">
-        <label class="ad-live"><input id="ad-live" type="checkbox"> 直播</label>
-        <button type="submit" class="ad-go">播到大螢幕</button>
-      </form>
       <div id="ad-msg"></div>
     </div>
     <button id="ad-toggle" type="button" aria-label="管理員控制台"><span class="ad-dot"></span>管理 · <span id="ad-mode-mini">音樂</span></button>

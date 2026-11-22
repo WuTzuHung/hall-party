@@ -122,22 +122,45 @@ input.dt{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(2
 @media (prefers-reduced-motion:reduce){#lt-switch .knob,#lt-switch .knob::after{transition:none}}
 @media (max-width:560px){#lights-card .lt-row{flex-direction:row}#lt-switch{width:auto}}
 </style>
+<style>
+/* ===== 兩個工作台：光之殿堂／城牆觀影館 ===== */
+body{transition:background-color .35s}
+body[data-ws=wall]{--bg:#0b110d;--card:#141b16;--line:rgba(168,196,150,.28);--muted:#b3bfac}
+body[data-ws=wall] h1{color:#cfe0c4}
+.card h2 small{font:400 12px "Noto Sans TC",sans-serif;color:var(--muted);margin-left:8px;letter-spacing:0}
+.ws-bar{position:sticky;top:0;z-index:5;display:flex;gap:10px;align-items:stretch;margin:0 -4px 16px;padding:8px 4px;background:var(--bg);transition:background-color .35s}
+.ws-tabs{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:5px;border-radius:16px;background:#0a0716;border:1px solid rgba(255,255,255,.08)}
+body[data-ws=wall] .ws-tabs{background:#070b08}
+.ws-tab{display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto;column-gap:8px;align-items:center;text-align:left;padding:9px 12px;min-height:54px;border-radius:12px;border:1px solid transparent;background:transparent;color:var(--muted);font-weight:700}
+.ws-tab .ws-ic{grid-row:1/3;font-size:16px;opacity:.7}
+.ws-tab .ws-name{font-size:15px;letter-spacing:.06em}
+.ws-tab .ws-sum{font:400 12px "Noto Sans TC",sans-serif;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;font-variant-numeric:tabular-nums}
+.ws-tab[aria-selected=true]{color:var(--ink)}
+#tab-hall[aria-selected=true]{background:linear-gradient(180deg,rgba(224,189,106,.2),rgba(224,189,106,.08));border-color:rgba(224,189,106,.55);box-shadow:0 0 18px rgba(224,189,106,.12) inset}
+#tab-hall[aria-selected=true] .ws-ic{color:#e0bd6a;opacity:1}
+#tab-wall[aria-selected=true]{background:linear-gradient(180deg,rgba(150,186,128,.2),rgba(150,186,128,.07));border-color:rgba(168,200,148,.55);box-shadow:0 0 18px rgba(150,186,128,.12) inset}
+#tab-wall[aria-selected=true] .ws-ic{color:#b9d6a2;opacity:1}
+@media (hover:hover) and (pointer:fine){.ws-tab[aria-selected=false]:hover{background:rgba(255,255,255,.04);color:var(--ink);filter:none}}
+.ws-bar #btn-logout{align-self:center}
+.ws-head{display:flex;align-items:baseline;gap:10px;margin:22px 2px 10px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.ws-head b{font-size:17px;letter-spacing:.12em;color:var(--gold)}
+#ws-wall .ws-head b{color:#cfe0c4}
+.ws-head span{font-size:13px;color:var(--muted)}
+body[data-ws=wall] #bookmark-card,body[data-ws=wall] #bookmark-pending{display:none}
+body[data-ws=wall] .grid div,body[data-ws=wall] input[type=text],body[data-ws=wall] input[type=password],body[data-ws=wall] input[type=number],body[data-ws=wall] code{background:#0a100c}
+@media (max-width:560px){
+  .ws-bar{flex-direction:row!important;gap:6px;align-items:stretch!important}
+  .ws-bar #btn-logout{width:auto!important;min-height:0;padding:6px 10px;font-size:13px;align-self:stretch}
+  .ws-tab{padding:8px 10px}.ws-tab .ws-ic{display:none}.ws-tab{grid-template-columns:1fr}.ws-tabs{gap:4px;padding:4px}
+  .grid{grid-template-columns:repeat(3,1fr)!important}.grid div{padding:8px 4px}.stat{font-size:22px}
+}
+@media (prefers-reduced-motion:reduce){body,.ws-bar{transition:none}}
+</style>
 </head>
 <body><div class="wrap">
-<h1>HALL DES LUMIÈRES</h1>
-<div class="sub">管理後台 · 只有知道密碼的人才能更換大螢幕影片</div>
+<h1 id="brand">HALL DES LUMIÈRES</h1>
+<div class="sub" id="sub">管理後台 · 只有知道密碼的人才能更換大螢幕影片</div>
 
-<div class="card" id="bookmark-card">
-  <h2>從 YouTube 播到殿堂</h2>
-  <a id="hall-bookmark" draggable="true">▶ 播到殿堂</a>
-  <ol>
-    <li>在 Brave 顯示書籤列（Windows：Ctrl＋Shift＋B；Mac：⌘＋Shift＋B），將上方金色連結拖到書籤列。每個網站網址需各自加入一次。</li>
-    <li>打開想播放的 YouTube 影片或直播，移到想開始的時間，再按書籤列的「▶ 播到殿堂」。請允許 YouTube 開啟新分頁。</li>
-    <li>新分頁會開啟本網站管理頁；尚未登入時先登入，再核對縮圖、標題、直播與開始時間，按「確認播放到殿堂」。只有確認後才會更換所有人的大螢幕。</li>
-  </ol>
-  <p class="muted">書籤不包含管理密碼，也不會直接呼叫管理 API。讀不到影片時間或直播資料時會略過，請在確認卡手動核對。手機可直接開啟管理頁貼上網址。</p>
-  <div id="bookmark-help" class="muted" role="status"></div>
-</div>
 <div class="card hidden" id="bookmark-pending" aria-labelledby="bookmark-heading">
   <h2 id="bookmark-heading">確認播到殿堂</h2>
   <div class="bookmark-preview"><img id="bookmark-thumb" alt="待播放影片縮圖"><div id="bookmark-title"></div></div>
@@ -160,11 +183,20 @@ input.dt{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(2
 </div>
 
 <div id="panel" class="hidden">
-  <div class="row" style="justify-content:flex-end;margin-bottom:16px"><button id="btn-logout">登出</button></div>
+  <div class="ws-bar">
+    <nav class="ws-tabs" role="tablist" aria-label="選擇要管理的建築">
+      <button type="button" role="tab" class="ws-tab" id="tab-hall" data-ws="hall" aria-controls="ws-hall"><span class="ws-ic" aria-hidden="true">✦</span><span class="ws-name">光之殿堂</span><span class="ws-sum" id="sum-hall">—</span></button>
+      <button type="button" role="tab" class="ws-tab" id="tab-wall" data-ws="wall" aria-controls="ws-wall"><span class="ws-ic" aria-hidden="true">◈</span><span class="ws-name">城牆觀影館</span><span class="ws-sum" id="sum-wall">—</span></button>
+    </nav>
+    <button id="btn-logout">登出</button>
+  </div>
   <div class="card">
-    <h2>現場狀態</h2>
+    <h2>現場狀態<small>全站</small></h2>
     <div class="grid"><div><div class="stat" id="s-online">0</div><div class="muted">在線</div></div><div><div class="stat" id="s-queue">0</div><div class="muted">排隊</div></div><div><div class="stat" id="s-max">0</div><div class="muted">人數上限</div></div></div>
   </div>
+  <!-- ===== 光之殿堂工作台：單一大螢幕、大廳音樂、比賽、開賽倒數、燈光 ===== -->
+  <section id="ws-hall" class="ws" role="tabpanel" aria-labelledby="tab-hall">
+  <div class="ws-head"><b>光之殿堂</b><span>英雄聯盟派對 · 一台大螢幕</span></div>
   <div class="card">
     <h2>正在播放</h2>
     <div class="now"><img id="thumb" alt=""><div><div id="now-title" style="font-weight:700"></div><div class="muted" id="now-info"></div></div></div>
@@ -182,11 +214,6 @@ input.dt{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(2
     <div class="row" style="margin-top:12px"><button class="primary" id="btn-set">播放到大螢幕</button></div>
   </div>
   <div class="card">
-    <h2>最近播放</h2>
-    <div class="muted">只保存在這台瀏覽器，最多 10 筆；重播會立即更換所有人的大螢幕。</div>
-    <div id="history"></div>
-  </div>
-  <div class="card">
     <h2>播放控制（非直播影片）</h2>
     <div class="row">
       <button data-a="play">▶ 播放</button><button data-a="pause">⏸ 暫停</button><button data-a="restart">⟲ 從頭</button>
@@ -196,15 +223,46 @@ input.dt{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(2
     <div class="row"><input type="text" id="seek" style="flex:1" placeholder="例如 754 或 12:34"><button id="btn-seek">跳轉</button></div>
   </div>
   <div class="card">
-    <h2>同時在線人數上限</h2>
-    <div class="row"><input type="number" id="max" min="1" max="500" style="flex:1"><button id="btn-max">儲存</button></div>
-    <div class="muted" style="margin-top:8px">建議 60 人。超過上限的人會看到排隊畫面，有人離開就自動進場。</div>
+    <h2>最近播放</h2>
+    <div class="muted">只保存在這台瀏覽器，最多 10 筆；重播會立即更換所有人的大螢幕。</div>
+    <div id="history"></div>
   </div>
-  <div class="card">
-    <h2>用指令更換（給 Claude 或自動化使用）</h2>
-    <div class="muted">在任何終端機執行：</div>
-    <p><code id="curl"></code></p>
+  <!-- ===== 大廳音樂與開賽倒數（獨立區塊） ===== -->
+  <div class="card" id="music-card">
+    <h2>大廳音樂 <span id="mu-mode" class="chip"></span></h2>
+    <div class="muted" id="mu-now">—</div>
+    <div class="row" style="margin-top:10px">
+      <button id="mu-next">下一首</button><button id="mu-back" class="primary">回到大廳音樂</button>
+    </div>
+    <label>加入歌單（YouTube 網址，任何格式都可以）</label>
+    <div class="row"><input type="text" id="mu-url" style="flex:2;min-width:220px" placeholder="https://youtu.be/... 或 watch?v=..."><input type="text" id="mu-title" style="flex:1;min-width:140px" placeholder="曲名（選填）"><button id="mu-add">加入</button></div>
+    <ol id="mu-list" class="mu-list"></ol>
+    <div class="mu-opts">
+      <div><span class="muted">循環</span>
+        <label class="opt"><input type="radio" name="mu-loop" value="all"> 整個歌單</label>
+        <label class="opt"><input type="radio" name="mu-loop" value="one"> 單曲</label>
+        <label class="opt"><input type="checkbox" id="mu-shuffle"> 隨機播放</label></div>
+      <div><span class="muted">大螢幕顯示</span>
+        <label class="opt"><input type="radio" name="mu-disp" value="card"> 正在播放卡片</label>
+        <label class="opt"><input type="radio" name="mu-disp" value="video"> 影片畫面</label></div>
+    </div>
+    <div class="muted" style="margin-top:8px">比賽開始（播放比賽影片或直播）時音樂會自動停止；非直播的比賽影片播完後自動回到大廳音樂，從下一首繼續。</div>
   </div>
+  <div class="card" id="cd-card">
+    <h2>開賽倒數</h2>
+    <div id="cd-state" class="cd-state muted">尚未設定</div>
+    <label>開賽時間</label>
+    <input type="datetime-local" id="cd-at" class="dt">
+    <label>時間到自動播放的比賽網址</label>
+    <input type="text" id="cd-url" placeholder="https://www.youtube.com/live/... 或 watch?v=...">
+    <label>顯示名稱（選填）</label>
+    <input type="text" id="cd-title" placeholder="例如：GENG vs BLG 決賽">
+    <div class="row" style="margin-top:10px"><label style="margin:0;display:flex;gap:6px;align-items:center;color:var(--ink)"><input type="checkbox" id="cd-live"> 這是直播</label></div>
+    <div class="row" style="margin-top:12px"><button class="primary" id="cd-start">開始倒數</button><button id="cd-cancel">取消倒數</button></div>
+    <div class="muted" style="margin-top:8px">倒數期間大螢幕會在音樂畫面上顯示倒數；時間一到自動切換成比賽。</div>
+  </div>
+  <div id="mu-msg"></div>
+  <!-- ===== /大廳音樂與開賽倒數 ===== -->
   <!-- ===== 室內燈光（獨立區塊） ===== -->
   <div class="card" id="lights-card">
     <h2>室內燈光</h2>
@@ -216,9 +274,34 @@ input.dt{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(2
     <div id="lt-msg" class="muted" role="status" aria-live="polite" style="margin-top:6px"></div>
   </div>
   <!-- ===== /室內燈光 ===== -->
+  <div class="card">
+    <h2>同時在線人數上限<small>全站共用（殿堂＋城牆區）</small></h2>
+    <div class="row"><input type="number" id="max" min="1" max="500" style="flex:1"><button id="btn-max">儲存</button></div>
+    <div class="muted" style="margin-top:8px">建議 60 人。超過上限的人會看到排隊畫面，有人離開就自動進場。</div>
+  </div>
+  <div class="card">
+    <h2>用指令更換（給 Claude 或自動化使用）</h2>
+    <div class="muted">在任何終端機執行：</div>
+    <p><code id="curl"></code></p>
+  </div>
+  <div class="card" id="bookmark-card">
+  <h2>從 YouTube 播到殿堂</h2>
+  <a id="hall-bookmark" draggable="true">▶ 播到殿堂</a>
+  <ol>
+    <li>在 Brave 顯示書籤列（Windows：Ctrl＋Shift＋B；Mac：⌘＋Shift＋B），將上方金色連結拖到書籤列。每個網站網址需各自加入一次。</li>
+    <li>打開想播放的 YouTube 影片或直播，移到想開始的時間，再按書籤列的「▶ 播到殿堂」。請允許 YouTube 開啟新分頁。</li>
+    <li>新分頁會開啟本網站管理頁；尚未登入時先登入，再核對縮圖、標題、直播與開始時間，按「確認播放到殿堂」。只有確認後才會更換所有人的大螢幕。</li>
+  </ol>
+  <p class="muted">書籤不包含管理密碼，也不會直接呼叫管理 API。讀不到影片時間或直播資料時會略過，請在確認卡手動核對。手機可直接開啟管理頁貼上網址。</p>
+  <div id="bookmark-help" class="muted" role="status"></div>
+</div>
+  </section>
+  <!-- ===== 城牆觀影館工作台：I、II 雙螢幕、同時開始、對齊 ===== -->
+  <section id="ws-wall" class="ws hidden" role="tabpanel" aria-labelledby="tab-wall">
+  <div class="ws-head"><b>城牆觀影館</b><span>同時視聽 · 兩台螢幕</span></div>
   <!-- ===== 城牆觀影館（同時視聽，兩台螢幕） ===== -->
   <div class="card" id="theater-card">
-    <h2>城牆觀影館 · 同時視聽<small>兩台螢幕各自同步播放</small></h2>
+    <h2>兩台螢幕 · 同時視聽<small>I、II 各自同步播放</small></h2>
     <div class="muted" style="margin-bottom:10px">從殿堂門口沿街往西走、穿過城門就是觀影館。I（左）通常放作品畫面、II（右）放實況主；兩台都會出聲，可以各自調音量比例。</div>
     <div class="th-grid">
       <div class="th-scr" data-k="a">
@@ -276,43 +359,12 @@ input.dt{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(2
     <div id="th-msg" role="status" aria-live="polite"></div>
   </div>
   <!-- ===== /城牆觀影館 ===== -->
-
-  <!-- ===== 大廳音樂與開賽倒數（獨立區塊） ===== -->
-  <div class="card" id="music-card">
-    <h2>大廳音樂 <span id="mu-mode" class="chip"></span></h2>
-    <div class="muted" id="mu-now">—</div>
-    <div class="row" style="margin-top:10px">
-      <button id="mu-next">下一首</button><button id="mu-back" class="primary">回到大廳音樂</button>
-    </div>
-    <label>加入歌單（YouTube 網址，任何格式都可以）</label>
-    <div class="row"><input type="text" id="mu-url" style="flex:2;min-width:220px" placeholder="https://youtu.be/... 或 watch?v=..."><input type="text" id="mu-title" style="flex:1;min-width:140px" placeholder="曲名（選填）"><button id="mu-add">加入</button></div>
-    <ol id="mu-list" class="mu-list"></ol>
-    <div class="mu-opts">
-      <div><span class="muted">循環</span>
-        <label class="opt"><input type="radio" name="mu-loop" value="all"> 整個歌單</label>
-        <label class="opt"><input type="radio" name="mu-loop" value="one"> 單曲</label>
-        <label class="opt"><input type="checkbox" id="mu-shuffle"> 隨機播放</label></div>
-      <div><span class="muted">大螢幕顯示</span>
-        <label class="opt"><input type="radio" name="mu-disp" value="card"> 正在播放卡片</label>
-        <label class="opt"><input type="radio" name="mu-disp" value="video"> 影片畫面</label></div>
-    </div>
-    <div class="muted" style="margin-top:8px">比賽開始（播放比賽影片或直播）時音樂會自動停止；非直播的比賽影片播完後自動回到大廳音樂，從下一首繼續。</div>
+  <div class="card">
+    <h2>用指令控制觀影館（給 Claude 或自動化使用）</h2>
+    <div class="muted">兩台同時開始（I、II 網址各一）：</div>
+    <p><code id="th-curl"></code></p>
   </div>
-  <div class="card" id="cd-card">
-    <h2>開賽倒數</h2>
-    <div id="cd-state" class="cd-state muted">尚未設定</div>
-    <label>開賽時間</label>
-    <input type="datetime-local" id="cd-at" class="dt">
-    <label>時間到自動播放的比賽網址</label>
-    <input type="text" id="cd-url" placeholder="https://www.youtube.com/live/... 或 watch?v=...">
-    <label>顯示名稱（選填）</label>
-    <input type="text" id="cd-title" placeholder="例如：GENG vs BLG 決賽">
-    <div class="row" style="margin-top:10px"><label style="margin:0;display:flex;gap:6px;align-items:center;color:var(--ink)"><input type="checkbox" id="cd-live"> 這是直播</label></div>
-    <div class="row" style="margin-top:12px"><button class="primary" id="cd-start">開始倒數</button><button id="cd-cancel">取消倒數</button></div>
-    <div class="muted" style="margin-top:8px">倒數期間大螢幕會在音樂畫面上顯示倒數；時間一到自動切換成比賽。</div>
-  </div>
-  <div id="mu-msg"></div>
-  <!-- ===== /大廳音樂與開賽倒數 ===== -->
+  </section>
   <div id="msg" role="status" aria-live="polite"></div>
 </div>
 </div>
@@ -350,6 +402,7 @@ function render(st) {
   if (st.online !== undefined) { $('#s-online').textContent = st.online; $('#s-queue').textContent = st.queue; }
   if (typeof st.lights === 'boolean' && window.renderLights) window.renderLights(st.lights);
   if (st.theater && window.renderTheater) window.renderTheater(st.theater);
+  if (window.renderSummary) window.renderSummary(st);
 }
 async function refresh() { const epoch = authEpoch; try { const st = await api('state'); if (epoch === authEpoch) render(st); } catch (e) { } }
 async function login() {
@@ -720,6 +773,57 @@ if (pw) login();
     tick();
   };
   setInterval(tick, 1000);
+})();
+</script>
+<script>
+// ===== 工作台切換：光之殿堂（/admin/hall）／城牆觀影館（/admin/theater） =====
+(() => {
+  const q = (s) => document.querySelector(s), KEY = 'hall-admin-ws';
+  const META = {
+    hall: { brand: 'HALL DES LUMIÈRES', sub: '管理後台 · 光之殿堂（英雄聯盟派對）· 一台大螢幕', title: '光之殿堂 · 管理後台', path: '/admin/hall' },
+    wall: { brand: 'WALL THEATER', sub: '管理後台 · 城牆觀影館（同時視聽）· 螢幕 I、II', title: '城牆觀影館 · 管理後台', path: '/admin/theater' },
+  };
+  const fromURL = () => {
+    const u = new URL(location.href);
+    if (u.searchParams.has('play')) return 'hall'; // 「播到殿堂」書籤一律開殿堂
+    if (/^\/admin\/(theater|wall)\/?$/.test(u.pathname) || /^#(theater|wall)$/.test(u.hash)) return 'wall';
+    if (/^\/admin\/hall\/?$/.test(u.pathname) || u.hash === '#hall') return 'hall';
+    return null;
+  };
+  let saved = null; try { saved = localStorage.getItem(KEY); } catch (_) { }
+  let cur = null;
+  function setWs(w, focus) {
+    if (!META[w]) w = 'hall';
+    cur = w; const m = META[w];
+    document.body.dataset.ws = w;
+    q('#ws-hall').classList.toggle('hidden', w !== 'hall'); q('#ws-wall').classList.toggle('hidden', w !== 'wall');
+    for (const t of document.querySelectorAll('.ws-tab')) { const on = t.dataset.ws === w; t.setAttribute('aria-selected', String(on)); t.tabIndex = on ? 0 : -1; }
+    q('#brand').textContent = m.brand; q('#sub').textContent = m.sub; document.title = m.title;
+    q('meta[name=theme-color]').content = w === 'wall' ? '#0b110d' : '#0e0a1b';
+    try { localStorage.setItem(KEY, w); } catch (_) { }
+    try { const u = new URL(location.href); u.pathname = m.path; u.hash = ''; history.replaceState(null, '', u); } catch (_) { }
+    if (focus) q('#tab-' + w).focus();
+  }
+  for (const t of document.querySelectorAll('.ws-tab')) {
+    t.addEventListener('click', () => { if (t.dataset.ws !== cur) { setWs(t.dataset.ws); window.scrollTo({ top: 0 }); } });
+    t.addEventListener('keydown', (e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); setWs(cur === 'hall' ? 'wall' : 'hall', true); } });
+  }
+  setWs(fromURL() || saved || 'hall');
+
+  // 分頁上的即時摘要：一眼看出另一棟正在播什麼
+  const cut = (s, n = 18) => (s = String(s || ''), s.length > n ? s.slice(0, n - 1) + '…' : s);
+  window.renderSummary = (st) => {
+    let h;
+    if (st.mode === 'match') h = (st.video.live ? '比賽直播' : st.video.playing ? '▶ 比賽' : '⏸ 比賽') + ' · ' + cut(st.video.title || st.video.id);
+    else { const t = st.music && st.music.track; h = t ? (st.music.playing ? '♪ ' : '⏸ ') + cut(t.title || t.id) : '大廳音樂（歌單空）'; }
+    if (st.countdown) h = '⏳ 倒數中 · ' + h;
+    if (st.lights === false) h += ' · 燈關';
+    q('#sum-hall').textContent = h;
+    const th = st.theater || {}, one = (k, n) => { const c = th[k]; return n + ' ' + (!c ? '—' : c.live ? '直播' : c.playing ? '▶' : '⏸'); };
+    q('#sum-wall').textContent = !th.a && !th.b ? '兩台都還沒設定' : one('a', 'I') + ' · ' + one('b', 'II');
+    const tc = q('#th-curl');
+    if (tc && !tc.textContent) tc.textContent = `curl -X POST ${location.origin}/api/admin/theater -H "Authorization: Bearer <密碼>" -H "Content-Type: application/json" -d '{"screen":"both","action":"set","urlA":"https://youtu.be/作品ID","urlB":"https://youtu.be/實況ID"}'`;
+  };
 })();
 </script>
 </body></html>
