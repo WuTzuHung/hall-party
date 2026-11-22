@@ -4,6 +4,7 @@
 // - 其他玩家看得到：開始／取消／完成都會透過伺服器轉播（t: 'fx'）
 import * as THREE from 'three';
 import { RINGS, RC, RING_T } from './district.js';
+import { LAB_EDGE } from './lab.js';
 
 export const HOME = { key: 'home', name: '大門口', x: 0, y: 0.18, z: 5.0 };
 export const POINTS = [
@@ -18,9 +19,13 @@ export const POINTS = [
   { key: 'theater', name: '觀影館', x: -170.5, y: 0.15, z: 15, area: 'wall' },
   { key: 'tfront', name: '雙螢幕前', x: -191, y: 0.15, z: 15, area: 'wall' },
   { key: 'armory', name: '裝備庫', x: -76.6, y: 0.15, z: 6.1, area: 'wall' },
+  // 研究所（街道東段的秋葉原老樓）
+  { key: 'labshop', name: '電視店門口', x: 71, y: 0.15, z: 3.2, area: 'lab', ry: Math.PI },
+  { key: 'labdoor', name: '研究所玄關', x: 67.9, y: 3.6, z: -7.3, area: 'lab', ry: Math.PI / 2 },
+  { key: 'labsofa', name: '沙發前', x: 69.05, y: 3.6, z: -2.55, area: 'lab', ry: Math.atan2(0.55, -1.5) },
 ];
 for (const p of POINTS) p.area ||= 'hall';
-export const areaOf = (x) => (x < -69 ? 'wall' : 'hall');
+export const areaOf = (x) => (x < -69 ? 'wall' : x > LAB_EDGE ? 'lab' : 'hall');
 export const RECALL_T = 4.0, TP_T = 3.0, TP_CD = 15, TP_CANCEL_CD = 4;
 const destOf = (d) => (d === -1 ? HOME : POINTS[d]);
 
@@ -233,8 +238,10 @@ class BurstFX {
 // 兩張平面圖共用同樣比例的畫布（31.2 : 67.8）：殿堂（螢幕在上）、城牆區（轉 90°，雙螢幕在上、城門在下）
 const MAP = { x0: -15.6, x1: 15.6, z0: -59.4, z1: 8.4 };
 const WMAP = { z0: -103, z1: 133, x0: -300 }; // 城牆區總覽：寬 236m（z），上方是西（最內圈的觀影館），下方是街道與殿堂
+const LMAP = { x0: 61.5, x1: 80, z0: -12 }; // 研究所附近：大樓、樓梯、門口那段街
 const PROJ = {
   hall: { span: MAP.x1 - MAP.x0, f: (x, z, s) => [(x - MAP.x0) * s, (z - MAP.z0) * s] },
+  lab: { span: LMAP.x1 - LMAP.x0, f: (x, z, s) => [(x - LMAP.x0) * s, (z - LMAP.z0) * s] },
   wall: { span: WMAP.z1 - WMAP.z0, f: (x, z, s) => [(WMAP.z1 - z) * s, (x - WMAP.x0) * s] },
 };
 function drawWall(g, s) {
@@ -269,6 +276,56 @@ function drawWall(g, s) {
   for (const z of [9.6, 20.4]) { g.beginPath(); rect(-135.4 + DX, z - 4.8, -133.8 + DX, z + 4.8); g.fill(); }
   g.restore();
   g.strokeStyle = gold + '0.6)'; g.lineWidth = 1; g.beginPath(); rect(-136 + DX, 2, -100 + DX, 28); g.stroke();
+}
+// 研究所平面：二樓的家具配置＋一樓店面、樓梯、門口的街
+function drawLab(g, s) {
+  const P = (x, z) => PROJ.lab.f(x, z, s);
+  const rect = (x0, z0, x1, z1) => { const [a, b] = P(x0, z0), [c, d] = P(x1, z1); g.rect(a, b, c - a, d - b); };
+  const fillR = (x0, z0, x1, z1, c) => { g.fillStyle = c; g.beginPath(); rect(x0, z0, x1, z1); g.fill(); };
+  const strokeR = (x0, z0, x1, z1, c, w = 1) => { g.strokeStyle = c; g.lineWidth = w; g.beginPath(); rect(x0, z0, x1, z1); g.stroke(); };
+  const amber = 'rgba(255,179,71,', ink = 'rgba(245,238,221,';
+  // 街道、人行道
+  fillR(LMAP.x0, 0, LMAP.x1, 8, ink + '0.06)'); fillR(LMAP.x0, 8, LMAP.x1, 22, 'rgba(20,20,26,0.4)'); fillR(LMAP.x0, 22, LMAP.x1, 30, ink + '0.06)');
+  g.strokeStyle = ink + '0.25)'; g.setLineDash([4, 5]); g.beginPath(); g.moveTo(...P(LMAP.x0, 15)); g.lineTo(...P(LMAP.x1, 15)); g.stroke(); g.setLineDash([]);
+  // 鄰棟
+  for (const [x0, z0, x1, z1] of [[60.2, -11, 64, 0], [76.05, -14, 86, 0], [60, 30, 86, 40]]) fillR(x0, z0, x1, z1, 'rgba(10,8,14,0.62)');
+  // 大樓外框與研究所地板
+  fillR(66, -11, 76, 0, 'rgba(12,9,6,0.75)');
+  fillR(66.3, -10.7, 75.7, -0.3, 'rgba(160,112,66,0.30)');
+  // 玄關、廚房、冰箱、淋浴、開發室
+  fillR(66.3, -8.4, 67.35, -6.6, ink + '0.12)');
+  fillR(66.4, -10.7, 68.8, -10.1, ink + '0.22)'); fillR(68.9, -10.7, 69.55, -10.05, ink + '0.4)');
+  fillR(71.0, -10.7, 75.7, -7.45, 'rgba(120,140,110,0.16)');
+  g.strokeStyle = 'rgba(185,196,174,0.7)'; g.lineWidth = 1.2; g.setLineDash([2, 2]); g.beginPath(); g.moveTo(...P(71, -7.45)); g.lineTo(...P(75.7, -7.45)); g.stroke(); g.setLineDash([]);
+  fillR(71.3, -10.7, 75.7, -9.95, ink + '0.2)');
+  // 沙發、矮桌、電視、鐵架、白板、電腦桌、微波爐架、書架
+  fillR(66.42, -5.45, 67.32, -2.75, 'rgba(160,130,92,0.75)');
+  fillR(67.72, -4.75, 68.58, -3.45, 'rgba(200,160,110,0.55)');
+  fillR(70.42, -5.35, 70.84, -2.85, ink + '0.28)');
+  fillR(66.32, -2.55, 66.72, -0.45, 'rgba(110,80,50,0.7)');
+  g.strokeStyle = ink + '0.85)'; g.lineWidth = 1.6; g.beginPath(); g.moveTo(...P(67.4, -6.55)); g.lineTo(...P(69.3, -6.55)); g.stroke();
+  fillR(74.85, -4.7, 75.7, -1.0, 'rgba(200,160,110,0.45)');
+  fillR(75.12, -6.4, 75.7, -5.1, ink + '0.3)');
+  g.save(); g.shadowColor = 'rgba(150,200,255,0.9)'; g.shadowBlur = 6; fillR(75.35, -3.95, 75.48, -1.75, 'rgba(170,210,255,0.9)'); g.restore();
+  g.save(); g.shadowColor = 'rgba(160,220,255,0.95)'; g.shadowBlur = 8; fillR(69.58, -4.42, 69.72, -3.78, 'rgba(210,235,255,0.95)'); g.restore();
+  fillR(69.72, -4.5, 70.3, -3.7, 'rgba(40,40,44,0.85)');
+  // 牆、門
+  strokeR(66, -11, 76, 0, amber + '0.75)', 1.4);
+  g.strokeStyle = 'rgba(12,9,6,1)'; g.lineWidth = 2.4; g.beginPath(); g.moveTo(...P(66, -7.95)); g.lineTo(...P(66, -7.0)); g.stroke();
+  // 樓梯與平台
+  fillR(64.15, -8.8, 65.9, 0, ink + '0.06)');
+  g.strokeStyle = ink + '0.28)'; g.lineWidth = 0.7;
+  for (let i = 0; i <= 20; i++) { const z = -0.7 - i * 0.27; g.beginPath(); g.moveTo(...P(64.15, z)); g.lineTo(...P(65.9, z)); g.stroke(); }
+  fillR(64.15, -8.8, 65.9, -6.1, ink + '0.12)');
+  g.strokeStyle = ink + '0.5)'; g.lineWidth = 1; g.beginPath(); g.moveTo(...P(65.0, -0.9)); g.lineTo(...P(65.0, -5.6)); g.stroke();
+  g.beginPath(); const [ax, ay] = P(65.0, -5.9); g.moveTo(ax, ay); g.lineTo(ax - 3, ay + 5); g.lineTo(ax + 3, ay + 5); g.closePath(); g.fillStyle = ink + '0.6)'; g.fill();
+  // 一樓店門口（電視堆）、自動販賣機、電線桿
+  fillR(66.5, -0.2, 75.5, 0, amber + '0.5)');
+  fillR(61.0, 0.05, 63.03, 0.8, 'rgba(200,230,255,0.6)');
+  for (const [x, z] of [[63.2, 7.55], [72, 22.45]]) { g.fillStyle = ink + '0.5)'; g.beginPath(); g.arc(...P(x, z), Math.max(1.5, s * 0.2), 0, Math.PI * 2); g.fill(); }
+  // 文字標示
+  g.font = `600 ${Math.max(9, s * 0.62)}px "Noto Sans TC",sans-serif`; g.textAlign = 'center'; g.fillStyle = amber + '0.85)';
+  g.fillText('研究所 2F', ...P(71, -6.0)); g.fillStyle = ink + '0.5)'; g.fillText('街道', ...P(71, 12.2));
 }
 const PIER_Z = [-11, -18, -25, -32, -39, -46, -53];
 function drawStatic(g, s) {
@@ -494,8 +551,8 @@ export function initTravel({ scene, hud, isTouch, toast, send, me, getAvatar, pl
     W = r.width; H = r.height; S = W / PROJ[view].span;
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
     bg = document.createElement('canvas'); bg.width = cv.width; bg.height = cv.height;
-    const g = bg.getContext('2d'); g.scale(dpr, dpr); (view === 'wall' ? drawWall : drawStatic)(g, S);
-    head.querySelector('.mm-sub').textContent = view === 'wall' ? '城牆區' : '殿堂平面';
+    const g = bg.getContext('2d'); g.scale(dpr, dpr); (view === 'wall' ? drawWall : view === 'lab' ? drawLab : drawStatic)(g, S);
+    head.querySelector('.mm-sub').textContent = view === 'wall' ? '城牆區' : view === 'lab' ? '研究所' : '殿堂平面';
     layoutNames();
     return true;
   }
@@ -505,8 +562,8 @@ export function initTravel({ scene, hud, isTouch, toast, send, me, getAvatar, pl
   const MX = (x, z = 0) => PX(x, z)[0], MZ = (z, x = 0) => PX(x, z)[1];
   const vis = (p) => (p.area || 'hall') === view;
   const mapAngle = (dx, dz) => { const [a, b] = PX(0, 0), [c, d] = PX(dx, dz); return Math.atan2(d - b, c - a); };
-  head.style.cursor = 'pointer'; head.title = '切換殿堂／城牆區地圖';
-  head.addEventListener('click', (e) => { e.stopPropagation(); manual = true; view = view === 'hall' ? 'wall' : 'hall'; bg = null; });
+  head.style.cursor = 'pointer'; head.title = '切換殿堂／城牆區／研究所地圖';
+  head.addEventListener('click', (e) => { e.stopPropagation(); manual = true; view = { hall: 'wall', wall: 'lab', lab: 'hall' }[view]; bg = null; });
   // 傳送點名稱（DOM 文字，放大選擇時顯示）
   function layoutNames() {
     legend.innerHTML = '';
@@ -548,7 +605,7 @@ export function initTravel({ scene, hud, isTouch, toast, send, me, getAvatar, pl
     for (const [id, av] of avatarsIter()) {
       const p = av.root.position; if (areaOf(p.x) !== view) continue;
       const col = av.color === 'blue' ? '146,198,255' : '255,169,198';
-      const up = p.y > 4.5; // 二樓的人加一圈白邊
+      const up = p.y > (view === "lab" ? 3 : 4.5); // 二樓的人加一圈白邊
       const [ax, ay] = PX(p.x, p.z);
       g.fillStyle = `rgba(${col},0.95)`; g.beginPath(); g.arc(ax, ay, up ? 2.4 : 2.2, 0, Math.PI * 2); g.fill();
       if (up) { g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 0.8; g.stroke(); }

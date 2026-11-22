@@ -170,6 +170,47 @@ body[data-ws=wall] .grid div,body[data-ws=wall] input[type=text],body[data-ws=wa
 @media (prefers-reduced-motion:reduce){body,.ws-bar{transition:none}}
 </style>
 <style>
+/* ===== 研究所工作台（琥珀色、映像管） ===== */
+body[data-ws=lab]{--bg:#120e09;--card:#1c1610;--line:rgba(255,179,71,.26);--muted:#c2b096}
+body[data-ws=lab] h1{color:#ffd9a0;font-family:"Courier New",monospace;letter-spacing:.18em}
+body[data-ws=lab] .ws-tabs{background:#0b0805}
+.ws-tabs{grid-template-columns:1fr 1fr 1fr!important}
+#tab-lab[aria-selected=true]{background:linear-gradient(180deg,rgba(255,179,71,.22),rgba(255,179,71,.07));border-color:rgba(255,179,71,.55);box-shadow:0 0 18px rgba(255,179,71,.12) inset}
+#tab-lab[aria-selected=true] .ws-ic{color:#ffb347;opacity:1}
+#ws-lab .ws-head b{color:#ffd9a0}
+body[data-ws=lab] #bookmark-card,body[data-ws=lab] #bookmark-pending{display:none}
+body[data-ws=lab] .grid div,body[data-ws=lab] input[type=text],body[data-ws=lab] input[type=password],body[data-ws=lab] input[type=number],body[data-ws=lab] code{background:#0d0a06}
+body[data-ws=lab] input[type=range]{accent-color:#ffb347}
+body[data-ws=lab] button.primary{background:linear-gradient(180deg,#ffd08a,#e08a2a);color:#22160a;border-color:transparent}
+.lb-now{display:flex;gap:14px;align-items:center}
+.lb-crt{position:relative;flex:none;width:168px;height:126px;border-radius:18px/24px;overflow:hidden;background:#0a0c0a;border:7px solid #2b2b2d;box-shadow:inset 0 0 22px rgba(0,0,0,.9),0 0 0 1px rgba(255,255,255,.06)}
+.lb-crt img{position:absolute;left:0;top:50%;width:100%;transform:translateY(-50%)}
+.lb-crt::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(0,0,0,.22) 0 1px,transparent 1px 3px),radial-gradient(ellipse,transparent 55%,rgba(0,0,0,.55))}
+.lb-crt span{position:absolute;left:8px;bottom:6px;z-index:2;font:700 11px "Courier New",monospace;letter-spacing:.12em;color:#9ff0b4;text-shadow:0 0 6px rgba(120,255,160,.7)}
+.lb-crt.off{background:radial-gradient(ellipse,#1d2a20,#050605)}
+.lb-meta{min-width:0;flex:1}.lb-meta .t{font-weight:700;font-size:16px;line-height:1.35;word-break:break-word}.lb-meta .i{margin-top:4px;color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
+.lb-btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.lb-btns button{min-height:40px}
+.lb-list{list-style:none;margin:12px 0 4px;padding:0;border-radius:12px;background:#0d0a06;overflow:hidden;counter-reset:ep}
+.lb-list li{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid rgba(255,255,255,.05)}
+.lb-list li:last-child{border-bottom:0}
+.lb-list li.cur{background:rgba(255,179,71,.1)}
+.lb-list .n{flex:none;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;font:700 12px "Courier New",monospace;background:rgba(255,255,255,.06);color:#ffb347}
+.lb-list img{flex:none;width:64px;height:36px;object-fit:cover;border-radius:6px;background:#000}
+.lb-list .t{flex:1;min-width:0}.lb-list .t b{display:block;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lb-list .t small{color:var(--muted);font-size:12px}
+.lb-list button{padding:5px 9px;min-height:32px;font-size:12px;border-radius:8px}
+.lb-list button:disabled{opacity:.3;cursor:default}
+.lb-add{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end}
+@media (max-width:560px){.lb-now{flex-direction:column;align-items:stretch}.lb-crt{width:100%;height:auto;aspect-ratio:4/3}.lb-add{grid-template-columns:1fr}.lb-list li{flex-wrap:wrap}.lb-list .t{flex-basis:calc(100% - 110px)}.lb-list .acts{margin-left:36px}}
+.lb-sw{position:relative;display:inline-flex;align-items:center;gap:10px;padding:8px 16px 8px 8px;border-radius:999px;border:1px solid rgba(255,179,71,.55);background:rgba(255,179,71,.14);min-height:48px;color:var(--ink)}
+.lb-sw .knob{position:relative;width:52px;height:30px;border-radius:999px;background:linear-gradient(180deg,#ffd08a,#e08a2a);box-shadow:0 0 14px rgba(255,179,71,.45);transition:background .25s}
+.lb-sw .knob::after{content:"";position:absolute;top:3px;left:25px;width:24px;height:24px;border-radius:50%;background:#22160a;transition:left .25s}
+.lb-sw[aria-checked=false]{border-color:rgba(255,255,255,.16);background:#0d0a06}
+.lb-sw[aria-checked=false] .knob{background:#3a3026;box-shadow:none}
+.lb-sw[aria-checked=false] .knob::after{left:3px;background:#c2b096}
+.lb-row{display:flex;align-items:center;gap:14px}.lb-row .st{flex:1;min-width:0;font-size:15px}.lb-row .st b{font-size:19px;color:#ffd9a0;margin-left:4px}
+</style>
+<style>
 /* 我的螢幕頻道 */
 .ch-list{list-style:none;margin:12px 0 4px;padding:0;border-radius:12px;background:#0f0a1f;overflow:hidden}
 .ch-list li{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.05)}
@@ -215,6 +256,7 @@ body[data-ws=wall] .grid div,body[data-ws=wall] input[type=text],body[data-ws=wa
     <nav class="ws-tabs" role="tablist" aria-label="選擇後台">
       <button type="button" role="tab" class="ws-tab" id="tab-hall" data-ws="hall" aria-controls="ws-hall"><span class="ws-ic" aria-hidden="true">✦</span><span class="ws-name">直播後台<small>光之殿堂</small></span><span class="ws-sum" id="sum-hall">—</span></button>
       <button type="button" role="tab" class="ws-tab" id="tab-wall" data-ws="wall" aria-controls="ws-wall"><span class="ws-ic" aria-hidden="true">◈</span><span class="ws-name">同時視聽後台<small>城牆觀影館</small></span><span class="ws-sum" id="sum-wall">—</span></button>
+      <button type="button" role="tab" class="ws-tab" id="tab-lab" data-ws="lab" aria-controls="ws-lab"><span class="ws-ic" aria-hidden="true">▣</span><span class="ws-name">研究所後台<small>秋葉原老樓</small></span><span class="ws-sum" id="sum-lab">—</span></button>
     </nav>
     <button id="btn-logout">登出</button>
   </div>
@@ -412,6 +454,53 @@ body[data-ws=wall] .grid div,body[data-ws=wall] input[type=text],body[data-ws=wa
     <p><code id="th-curl"></code></p>
   </div>
   </section>
+  <!-- ===== 研究所工作台：一台映像管電視、片庫、遙控器權限、燈光 ===== -->
+  <section id="ws-lab" class="ws hidden" role="tabpanel" aria-labelledby="tab-lab">
+  <div class="ws-head"><b>研究所後台</b><span>秋葉原老樓二樓 · 一台映像管電視，研究所裡的人一起看</span></div>
+  <div class="card" id="lb-tv-card">
+    <h2>映像管電視<small>研究所裡所有人看同一台、同一個進度</small></h2>
+    <div class="lb-now"><div class="lb-crt off" id="lb-crt"><img alt="" id="lb-thumb" hidden><span id="lb-state">NO SIGNAL</span></div><div class="lb-meta"><div class="t" id="lb-title">電視還沒有片子</div><div class="i" id="lb-info"></div></div></div>
+    <div class="lb-btns">
+      <button data-la="prev">⏮ 上一集</button><button data-la="skip" data-s="-10">−10 秒</button><button class="primary" id="lb-pp" data-la="toggle">▶ 播放</button><button data-la="skip" data-s="10">+10 秒</button><button data-la="next">下一集 ⏭</button>
+      <button data-la="restart">⟲ 從頭</button><button data-la="clear">關電視</button>
+    </div>
+    <div class="th-gain" style="margin-top:10px">音量 <input type="range" min="0" max="100" step="5" id="lb-gain"><span id="lb-gv">100</span></div>
+    <label for="lb-url" style="margin-top:14px">直接播一個網址（不放進片庫）</label>
+    <input type="text" id="lb-url" placeholder="YouTube 影片或直播網址">
+    <div class="row" style="margin-top:8px;gap:10px;align-items:center"><label class="check" style="min-height:32px"><input type="checkbox" id="lb-live"> 這是直播</label><label class="check" style="min-height:32px"><input type="checkbox" id="lb-also"> 也加進片庫</label><button class="primary" id="lb-set">播到電視</button></div>
+  </div>
+  <div class="card" id="lb-list-card">
+    <h2>片庫<small>觀眾用遙控器選集時看到的清單</small></h2>
+    <div class="lb-add">
+      <div><label for="lb-add-url">YouTube 網址</label><input type="text" id="lb-add-url" placeholder="https://youtu.be/…"></div>
+      <div><label for="lb-add-title">標題（選填，例如「第 1 話」）</label><input type="text" id="lb-add-title" maxlength="120" placeholder="留空會自動抓影片標題"></div>
+      <button id="lb-add" class="primary" style="min-height:44px">加進片庫</button>
+    </div>
+    <ol class="lb-list" id="lb-list"></ol>
+    <div class="row" style="margin-top:10px;gap:14px;align-items:center;flex-wrap:wrap">
+      <label class="check" style="min-height:32px"><input type="checkbox" id="lb-auto"> 播完自動接下一集</label>
+      <button id="lb-clearlist">清空片庫</button>
+    </div>
+    <div class="muted" style="margin-top:6px">免費方案重新部署後片庫會清空；常用的清單可以請 Claude 用下方指令一次加回來。</div>
+  </div>
+  <div class="card" id="lb-lock-card">
+    <h2>觀眾遙控器</h2>
+    <div class="lb-row"><div class="st">目前<b id="lb-lock-state">開放</b></div><button class="lb-sw" id="lb-lock" type="button" role="switch" aria-checked="true" aria-label="開放觀眾遙控器"><span class="knob" aria-hidden="true"></span><span id="lb-lock-label">開放中</span></button></div>
+    <div class="muted" style="margin-top:8px">開放時，走進研究所的觀眾可以按 R 或「📺 遙控器」選集、播放／暫停、快轉；鎖定後只剩管理員能操作。</div>
+  </div>
+  <div class="card" id="lb-lights-card">
+    <h2>研究所燈光</h2>
+    <div class="lb-row"><div class="st">目前<b id="lb-lt-state">開</b></div><button class="lb-sw" id="lb-lt" type="button" role="switch" aria-checked="true" aria-label="研究所的燈"><span class="knob" aria-hidden="true"></span><span id="lb-lt-label">關燈</span></button></div>
+    <div class="muted" style="margin-top:8px">關燈後日光燈熄掉，只剩映像管電視、電腦螢幕和窗外的街燈；一樓電視店照常營業。殿堂、觀影館的燈另外控制。</div>
+  </div>
+  <div class="card">
+    <h2>用指令控制研究所（給 Claude 或自動化使用）</h2>
+    <div class="muted">把一集加進片庫：</div>
+    <p><code id="lb-curl"></code></p>
+    <div class="muted">播片庫第 1 集（index 從 0 開始）：<code>{"action":"pick","index":0}</code> · 其他：play、pause、next、prev、skip（seconds）、lock（on）、auto（on）</div>
+  </div>
+  <div id="lb-msg" role="status" aria-live="polite"></div>
+  </section>
   <div id="msg" role="status" aria-live="polite"></div>
 </div>
 </div>
@@ -450,6 +539,7 @@ function render(st) {
   if (typeof st.lights === 'boolean' && window.renderLights) window.renderLights(st.lights);
   if (typeof st.tlights === 'boolean' && window.renderTLights) window.renderTLights(st.tlights);
   if (st.theater && window.renderTheater) window.renderTheater(st.theater);
+  if (st.lab && window.renderLab) window.renderLab(st.lab, st.llights);
   if (window.renderSummary) window.renderSummary(st);
   if (st.channels && window.renderChannels) window.renderChannels(st.channels);
 }
@@ -849,11 +939,13 @@ if (pw) login();
   const META = {
     hall: { brand: 'HALL DES LUMIÈRES', sub: '直播後台 · 光之殿堂看英雄聯盟比賽直播（一台大螢幕）', title: '直播後台 · 光之殿堂', path: '/admin/hall' },
     wall: { brand: 'WALL THEATER', sub: '同時視聽後台 · 城牆觀影館（螢幕 I、II）', title: '同時視聽後台 · 城牆觀影館', path: '/admin/theater' },
+    lab: { brand: 'LAB · CRT 03', sub: '研究所後台 · 秋葉原老樓二樓的映像管電視（片庫、遙控器、燈光）', title: '研究所後台 · 秋葉原老樓', path: '/admin/lab' },
   };
   const fromURL = () => {
     const u = new URL(location.href);
     if (u.searchParams.has('play')) return 'hall'; // 「播到殿堂」書籤一律開殿堂
     if (/^\/admin\/(theater|wall)\/?$/.test(u.pathname) || /^#(theater|wall)$/.test(u.hash)) return 'wall';
+    if (/^\/admin\/lab\/?$/.test(u.pathname) || u.hash === '#lab') return 'lab';
     if (/^\/admin\/hall\/?$/.test(u.pathname) || u.hash === '#hall') return 'hall';
     return null;
   };
@@ -863,17 +955,17 @@ if (pw) login();
     if (!META[w]) w = 'hall';
     cur = w; const m = META[w];
     document.body.dataset.ws = w;
-    q('#ws-hall').classList.toggle('hidden', w !== 'hall'); q('#ws-wall').classList.toggle('hidden', w !== 'wall');
+    q('#ws-hall').classList.toggle('hidden', w !== 'hall'); q('#ws-wall').classList.toggle('hidden', w !== 'wall'); q('#ws-lab').classList.toggle('hidden', w !== 'lab');
     for (const t of document.querySelectorAll('.ws-tab')) { const on = t.dataset.ws === w; t.setAttribute('aria-selected', String(on)); t.tabIndex = on ? 0 : -1; }
     q('#brand').textContent = m.brand; q('#sub').textContent = m.sub; document.title = m.title;
-    q('meta[name=theme-color]').content = w === 'wall' ? '#0b110d' : '#0e0a1b';
+    q('meta[name=theme-color]').content = w === 'wall' ? '#0b110d' : w === 'lab' ? '#120e09' : '#0e0a1b';
     try { localStorage.setItem(KEY, w); } catch (_) { }
     try { const u = new URL(location.href); u.pathname = m.path; u.hash = ''; history.replaceState(null, '', u); } catch (_) { }
     if (focus) q('#tab-' + w).focus();
   }
   for (const t of document.querySelectorAll('.ws-tab')) {
     t.addEventListener('click', () => { if (t.dataset.ws !== cur) { setWs(t.dataset.ws); window.scrollTo({ top: 0 }); } });
-    t.addEventListener('keydown', (e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); setWs(cur === 'hall' ? 'wall' : 'hall', true); } });
+    t.addEventListener('keydown', (e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); const order = ['hall', 'wall', 'lab'], i = order.indexOf(cur); setWs(order[(i + (e.key === 'ArrowRight' ? 1 : 2)) % 3], true); } });
   }
   setWs(fromURL() || saved || 'hall');
 
@@ -888,9 +980,99 @@ if (pw) login();
     q('#sum-hall').textContent = h;
     const th = st.theater || {}, one = (k, n) => { const c = th[k]; return n + ' ' + (!c ? '—' : c.live ? '直播' : c.playing ? '▶' : '⏸'); };
     q('#sum-wall').textContent = (!th.a && !th.b ? '兩台都還沒設定' : one('a', 'I') + ' · ' + one('b', 'II')) + (st.tlights === false ? ' · 燈關' : '');
+    const L = st.lab || {}, lt = L.tv, nl = (L.list || []).length;
+    q('#sum-lab').textContent = (lt ? (lt.live ? '直播' : lt.playing ? '▶' : '⏸') + ' ' + (lt.idx >= 0 ? `第 ${lt.idx + 1} 集` : cut(lt.title || lt.id, 12)) : '電視關著') + ` · 片庫 ${nl}` + (L.lock ? ' · 🔒' : '') + (st.llights === false ? ' · 燈關' : '');
     const tc = q('#th-curl');
     if (tc && !tc.textContent) tc.textContent = `curl -X POST ${location.origin}/api/admin/theater -H "Authorization: Bearer <密碼>" -H "Content-Type: application/json" -d '{"screen":"both","action":"set","urlA":"https://youtu.be/作品ID","urlB":"https://youtu.be/實況ID"}'`;
   };
+})();
+</script>
+<script>
+// ===== 研究所工作台 =====
+(() => {
+  const q = (s) => document.querySelector(s);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const say = (t, ok = true) => { const m = q('#lb-msg'); m.textContent = t; m.className = ok ? 'ok' : 'bad'; clearTimeout(say.t); say.t = setTimeout(() => { m.textContent = ''; }, 5000); };
+  let lab = null, llights = true, at = 0, lastList = '';
+  const pos = () => { const c = lab && lab.tv; return !c || c.live ? 0 : c.position + (c.playing ? (performance.now() - at) / 1000 : 0); };
+  async function run(body, ok, btn) {
+    if (btn) btn.disabled = true;
+    try { const st = await api('lab', body); render(st); if (ok) say(ok); return true; }
+    catch (e) { say('失敗：' + e.message, false); return false; }
+    finally { if (btn) btn.disabled = false; }
+  }
+  window.renderLab = (L, lights) => {
+    lab = L; at = performance.now(); if (typeof lights === 'boolean') llights = lights;
+    const c = L.tv, list = L.list || [];
+    q('#lb-crt').classList.toggle('off', !c);
+    const img = q('#lb-thumb'); if (c) { const src = `https://i.ytimg.com/vi/${c.id}/hqdefault.jpg`; if (img.getAttribute('src') !== src) img.src = src; img.hidden = false; } else img.hidden = true;
+    q('#lb-state').textContent = !c ? 'NO SIGNAL' : c.live ? 'LIVE' : c.playing ? 'PLAY ▶' : 'PAUSE ❚❚';
+    q('#lb-title').textContent = c ? (c.title || c.id) : '電視還沒有片子';
+    tickInfo();
+    q('#lb-pp').textContent = c && c.playing ? '⏸ 暫停' : '▶ 播放'; q('#lb-pp').disabled = !c;
+    for (const b of document.querySelectorAll('#lb-tv-card [data-la="skip"]')) b.disabled = !c || c.live;
+    q('#lb-tv-card [data-la="prev"]').disabled = !list.length || (c && c.idx === 0);
+    q('#lb-tv-card [data-la="next"]').disabled = !list.length || (c && c.idx >= list.length - 1);
+    for (const a of ['restart', 'clear']) q(`#lb-tv-card [data-la="${a}"]`).disabled = !c;
+    if (document.activeElement !== q('#lb-gain')) { q('#lb-gain').value = c ? c.gain : 100; q('#lb-gv').textContent = c ? c.gain : 100; }
+    q('#lb-gain').disabled = !c;
+    q('#lb-auto').checked = L.auto !== false;
+    const ls = q('#lb-lock'); ls.setAttribute('aria-checked', String(!L.lock)); q('#lb-lock-label').textContent = L.lock ? '已鎖定' : '開放中'; q('#lb-lock-state').textContent = L.lock ? '鎖定（只有管理員能操作）' : '開放';
+    const lt = q('#lb-lt'); lt.setAttribute('aria-checked', String(llights)); q('#lb-lt-label').textContent = llights ? '關燈' : '開燈'; q('#lb-lt-state').textContent = llights ? '開' : '關（只剩電視的光）';
+    const key = JSON.stringify([list, c ? c.idx : -2]);
+    if (key !== lastList) {
+      lastList = key;
+      const ol = q('#lb-list');
+      ol.innerHTML = list.length ? '' : '<li class="muted">片庫是空的：在上面貼網址加進來</li>';
+      list.forEach((x, i) => {
+        const li = document.createElement('li'); if (c && c.idx === i) li.className = 'cur';
+        li.innerHTML = `<span class="n">${i + 1}</span><img alt="" loading="lazy" src="https://i.ytimg.com/vi/${esc(x.id)}/mqdefault.jpg"><span class="t"><b>${esc(x.title || '（未命名）')}</b><small>${esc(x.id)}${x.live ? ' · 直播' : ''}${c && c.idx === i ? ' · 播放中' : ''}</small></span><span class="acts row"></span>`;
+        const acts = li.querySelector('.acts');
+        const mk = (t, label, fn, dis) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.setAttribute('aria-label', label); b.disabled = !!dis; b.onclick = () => fn(b); acts.append(b); };
+        mk('▶ 播', '播這集：' + (x.title || x.id), (b) => run({ action: 'pick', index: i }, `電視轉到第 ${i + 1} 集`, b));
+        mk('↑', '上移', (b) => run({ action: 'move', index: i, dir: -1 }, '', b), i === 0);
+        mk('↓', '下移', (b) => run({ action: 'move', index: i, dir: 1 }, '', b), i === list.length - 1);
+        mk('改名', '改標題', (b) => { const t = prompt('這一集的標題', x.title || ''); if (t !== null) run({ action: 'rename', index: i, title: t }, '已改名', b); });
+        mk('移除', '移除：' + (x.title || x.id), (b) => run({ action: 'remove', index: i }, '已從片庫移除', b));
+        ol.append(li);
+      });
+    }
+  };
+  function tickInfo() {
+    const c = lab && lab.tv, n = lab ? (lab.list || []).length : 0;
+    const f = (s) => { s = Math.max(0, Math.floor(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? h + ':' : '') + String(m).padStart(h ? 2 : 1, '0') + ':' + String(x).padStart(2, '0'); };
+    q('#lb-info').textContent = !c ? (n ? `片庫有 ${n} 集，按「▶ 播」開始` : '先在下方片庫加片') : `${c.idx >= 0 ? `片庫第 ${c.idx + 1}/${n} 集 · ` : '直接播放 · '}${c.live ? '直播中' : (c.playing ? '播放中' : '已暫停') + ' · ' + f(pos()) + (c.dur ? ' / ' + f(c.dur) : '')}`;
+  }
+  setInterval(() => { if (lab && document.body.dataset.ws === 'lab') tickInfo(); }, 1000);
+  for (const b of document.querySelectorAll('#lb-tv-card [data-la]')) b.addEventListener('click', () => {
+    const a = b.dataset.la, body = { action: a };
+    if (a === 'skip') body.seconds = Number(b.dataset.s);
+    if (a === 'clear' && !confirm('關掉研究所的電視？研究所裡的人會看到 NO SIGNAL。')) return;
+    run(body, { prev: '上一集', next: '下一集', toggle: lab && lab.tv && lab.tv.playing ? '已暫停' : '已播放', restart: '從頭開始', clear: '電視已關' }[a] || '', b);
+  });
+  q('#lb-gain').addEventListener('input', () => { q('#lb-gv').textContent = q('#lb-gain').value; });
+  q('#lb-gain').addEventListener('change', () => run({ action: 'gain', gain: Number(q('#lb-gain').value) }, '已調整音量比例'));
+  q('#lb-url').addEventListener('input', () => { if (/\/live\//.test(q('#lb-url').value)) q('#lb-live').checked = true; });
+  q('#lb-set').addEventListener('click', async () => {
+    const url = q('#lb-url').value.trim(); if (!url) return;
+    if (await run({ action: 'set', url, live: q('#lb-live').checked }, '已播到研究所的電視', q('#lb-set'))) {
+      if (q('#lb-also').checked) await run({ action: 'add', url, live: q('#lb-live').checked }, '已播到電視，也加進片庫');
+      q('#lb-url').value = '';
+    }
+  });
+  q('#lb-add').addEventListener('click', async () => {
+    const url = q('#lb-add-url').value.trim(); if (!url) return;
+    if (await run({ action: 'add', url, title: q('#lb-add-title').value.trim() }, '已加進片庫', q('#lb-add'))) { q('#lb-add-url').value = ''; q('#lb-add-title').value = ''; q('#lb-add-url').focus(); }
+  });
+  for (const id of ['#lb-add-url', '#lb-add-title']) q(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') q('#lb-add').click(); });
+  q('#lb-auto').addEventListener('change', () => run({ action: 'auto', on: q('#lb-auto').checked }, q('#lb-auto').checked ? '播完會自動接下一集' : '播完會停在片尾'));
+  q('#lb-clearlist').addEventListener('click', () => { if (confirm('清空整個片庫？')) run({ action: 'clearList' }, '片庫已清空', q('#lb-clearlist')); });
+  q('#lb-lock').addEventListener('click', () => { const on = !(lab && lab.lock); run({ action: 'lock', on }, on ? '已鎖定遙控器：觀眾只能看' : '已開放遙控器', q('#lb-lock')); });
+  q('#lb-lt').addEventListener('click', async () => {
+    const want = !llights, b = q('#lb-lt'); b.disabled = true;
+    try { render(await api('lights', { on: want, zone: 'lab' })); say(want ? '研究所的燈已開' : '研究所已關燈，只剩電視的光'); } catch (e) { say('失敗：' + e.message, false); } finally { b.disabled = false; }
+  });
+  q('#lb-curl').textContent = `curl -X POST ${location.origin}/api/admin/lab -H "Authorization: Bearer <密碼>" -H "Content-Type: application/json" -d '{"action":"add","url":"https://youtu.be/影片ID","title":"第 1 話"}'`;
 })();
 </script>
 <script>

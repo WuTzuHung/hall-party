@@ -10,6 +10,9 @@ import { initAdminDock } from './admin-dock.js';
 import { initOdm } from './odm.js';
 import { initTravel } from './travel.js';
 import { initMyScreen } from './myscreen.js';
+import { LABTV, LAB_ROOM, LAB_SHOP, LAB_EDGE, inLabRoom, inLabShop, onLabStairs } from './lab.js';
+import { initLabTv } from './labtv.js';
+import { LAB_TV_GLOW } from './world.js';
 
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -48,22 +51,30 @@ const tScreens = TSCREENS.map((c, i) => {
   sc.el.idle.style.background = 'radial-gradient(ellipse at 50% 40%,#2a3528,#080a08 72%)';
   sc.setActive(false); return sc;
 });
-const allScreens = [screen, ...tScreens];
+// 研究所的映像管電視：4:3 的映像管裡放 16:9 的影片（上下黑邊），加上掃描線與暗角
+const labIdle = `<div style="position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(255,255,255,.05) 0 2px,transparent 2px 5px),radial-gradient(ellipse at 50% 50%,#233026,#050806 75%)"></div><div style="position:relative;font:700 120px 'Courier New',monospace;letter-spacing:24px;color:#bfe8c8;text-shadow:0 0 18px rgba(140,255,170,.55)">CH 03</div><div style="position:relative;margin-top:24px;font:600 40px 'Courier New',monospace;letter-spacing:14px;color:#7fae8a">NO SIGNAL</div>`;
+const labScreen = new BigScreen(scene, layer, { ...LABTV, elId: 'yt-lab', idleHTML: labIdle });
+labScreen.el.idle.style.background = '#050806';
+{ const ov = document.createElement('div'); ov.className = 'crt-ov'; labScreen.obj.element.appendChild(ov); }
+labScreen.setActive(false);
+const allScreens = [screen, ...tScreens, labScreen];
 const anySound = () => allScreens.some((x) => x.isSoundOn());
 let onZone = null;
 let zoneWall = false; // 玩家在城牆區：只播觀影館兩台；否則只播殿堂大螢幕
+let zoneLab = false; // 玩家在研究所區（街道東段）：只播研究所的映像管電視
+const zoneName = () => (zoneWall ? 'wall' : zoneLab ? 'lab' : 'hall');
 function updateZone() {
-  const x = me.pos.x, w = zoneWall ? x < -68.5 : x < -69.5;
-  if (w === zoneWall) return;
-  zoneWall = w;
-  if (w) screen.endPersonal('zone'); // 我的螢幕只在殿堂裡
+  const x = me.pos.x, w = zoneWall ? x < -68.5 : x < -69.5, l = zoneLab ? x > LAB_EDGE - 0.5 : x > LAB_EDGE + 0.5;
+  if (w === zoneWall && l === zoneLab) return;
+  zoneWall = w; zoneLab = l;
+  if (w || l) screen.endPersonal('zone'); // 我的螢幕只在殿堂裡
   if (!w && viewMode === 'flat') tvSet('hall');
-  screen.setActive(!w); for (const t of tScreens) t.setActive(w);
+  screen.setActive(!w && !l); for (const t of tScreens) t.setActive(w); labScreen.setActive(l);
   updateVolume(); updateSoundButton();
-  if (onZone) onZone(w); // 管理員控制台切換成觀影館／殿堂功能
+  if (onZone) onZone(zoneName()); // 管理員控制台切換成觀影館／研究所／殿堂功能
 }
 // 目前要看的螢幕（坐下視角、最佳視角、全螢幕用）：{ x, y, z, w, h, ry }，ry 為螢幕面向（0 = 朝 +z）
-const focusScreen = () => (zoneWall ? { ...TFOCUS, ry: Math.PI / 2 } : { x: SCREEN.x, y: SCREEN.y, z: SCREEN.z, w: SCREEN.w, h: SCREEN.h, ry: 0 });
+const focusScreen = () => (zoneWall ? { ...TFOCUS, ry: Math.PI / 2 } : zoneLab ? { x: LABTV.x, y: LABTV.y, z: LABTV.z, w: 0.6, h: 0.45, ry: LABTV.ry } : { x: SCREEN.x, y: SCREEN.y, z: SCREEN.z, w: SCREEN.w, h: SCREEN.h, ry: 0 });
 layer.setSize(innerWidth, innerHeight);
 
 // ---------- 玩家 ----------
@@ -76,7 +87,7 @@ let jumpQueued = -1e9; // 按下跳躍的時間（容許落地前一點點就按
 const cam = { yaw: 0, pitch: 0.18, dist: 5.5, targetDist: 5.5, minD: 0, maxD: 14 };
 const keys = {};
 // 觀看模式：normal 一般 / seat 座位第一人稱 / best 正中央最佳視角 / full 螢幕放到最大
-let viewMode = 'normal'; let bestD = 17; let savedSeatCam = null;
+let viewMode = 'normal'; let bestD = 17; let bestL = 1.7; let savedSeatCam = null; // bestL：研究所電視的最佳視角距離
 let gear = null; // 立體機動裝置（odm.js，於下方初始化）
 let joy = { active: false, x: 0, y: 0, id: null };
 let entered = false;
@@ -168,6 +179,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'Escape' && travel.picking) { travel.setPick(false); return; }
   if (gear.key(e)) return;
   if (e.code === 'KeyE' && !e.repeat) toggleSit();
+  if (e.code === 'KeyR' && !e.repeat && zoneLab) { labTv.toggle(); return; }
   if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) jumpQueued = performance.now(); }
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
 });
@@ -251,7 +263,7 @@ canvas.addEventListener('pointerup', endPointer); canvas.addEventListener('point
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
   const f = Math.exp(e.deltaY * 0.0012);
-  if (viewMode === 'best') { bestD = THREE.MathUtils.clamp(bestD * f, 6, zoneWall ? 30 : 42); return; }
+  if (viewMode === 'best') { if (zoneLab) bestL = THREE.MathUtils.clamp(bestL * f, 0.8, 2.9); else bestD = THREE.MathUtils.clamp(bestD * f, 6, zoneWall ? 30 : 42); return; }
   if (viewMode === 'full' || viewMode === 'flat') return;
   if (zoomSeat(f)) return;
   cam.targetDist = cam.targetDist < 0.3 && e.deltaY > 0 ? 0.8 : THREE.MathUtils.clamp(cam.targetDist * f, cam.minD, cam.maxD);
@@ -650,6 +662,9 @@ function connect() {
       case 'gears': case 'gearOk': case 'gearNo': gear.onMsg(m); break;
       case 'lights': applyLights(m.on); break;
       case 'tlights': applyTLights(m.on); break;
+      case 'llights': applyLLights(m.on); break;
+      case 'labNo': labTv.onNo(m); break;
+      case 'labFx': labTv.onFx(m, me.id, (id) => remotes.get(id)?.av?.name); break;
       case 'sitOk': break;
       case 'sitNo':
         if (me.seat && me.seat.i === Number(m.seat)) { standUp(); toast('這個位子有人坐了'); }
@@ -679,11 +694,15 @@ $('#btn-kicked').addEventListener('click', () => location.reload());
 function onMedia(m) {
   mediaState = m; screen.setMedia(m); dock.setMedia(m);
   const th = m.theater || {}; tScreens[0].setChannel(th.a || null); tScreens[1].setChannel(th.b || null);
+  labScreen.setChannel((m.lab && m.lab.tv) || null); labTv.setMedia(m.lab);
+  LAB_TV_GLOW.k = m.lab && m.lab.tv ? (m.lab.tv.playing ? 1 : 0.6) : 0.25;
 }
 // 室內燈（管理員控制，伺服器同步）：記住最新值；world.setLights 由 world.js 提供（還沒有時先略過，之後 applyLights() 會補上）
 let lightsOn = true;
 // 城牆觀影館的燈（同時視聽後台控制）
 function applyTLights(on) { world?.setWallLights?.(!!on); dock?.setTLights?.(!!on); }
+// 研究所的日光燈（研究所後台控制）
+function applyLLights(on) { world?.setLabLights?.(!!on); dock?.setLLights?.(!!on); }
 function applyLights(on) {
   if (typeof on === 'boolean') lightsOn = on;
   document.body.classList.toggle('lights-off', !lightsOn);
@@ -704,7 +723,7 @@ function onWelcome(m) {
   previews.length = 0;
   setSeatOcc(m.seats);
   if (m.media) onMedia(m.media); else screen.setState(m.video);
-  applyLights(m.lights); applyTLights(m.tlights !== false);
+  applyLights(m.lights); applyTLights(m.tlights !== false); applyLLights(m.llights !== false);
   for (const p of m.players) addRemote(p.id, p.c, p);
   if (firstEntry) {
     entered = true;
@@ -804,11 +823,19 @@ const chat = initChat({
 const myScreen = initMyScreen({
   screen, toast, isTouch, onFocus: () => { clearKeys(); unlockPointer(); },
   wantSound: () => { if (!anySound()) setSound(true); },
-  inHall: () => !zoneWall,
+  inHall: () => !zoneWall && !zoneLab,
+});
+// 研究所電視的遙控器（研究所裡的人共用一台）
+const labTv = initLabTv({
+  send: wsSend, toast, isTouch, onFocus: () => { clearKeys(); unlockPointer(); },
+  here: () => entered && zoneLab && inLabRoom(me.pos.x, me.pos.y, me.pos.z),
+  wantSound: () => { if (!anySound()) setSound(true); },
+  isAdmin: () => !!(dock && dock.active),
+  enterFull: () => enterFull(),
 });
 // 管理員控制台（有存管理密碼且驗證成功才顯示）
 const dock = initAdminDock({ toast, onFocus: () => { clearKeys(); unlockPointer(); }, isTouch });
-onZone = (w) => { dock.setZone(w); myScreen.refresh(); }; dock.setZone(zoneWall);
+onZone = (w) => { dock.setZone(w); myScreen.refresh(); }; dock.setZone(zoneName());
 $('#btn-rechar').addEventListener('click', changeCharacter);
 // 傳送與回城（左上角小地圖）
 const travel = initTravel({
@@ -829,7 +856,7 @@ const travel = initTravel({
     if (!spot) spot = [d.x, d.y, d.z];
     gear.reset();
     me.pos.set(spot[0], spot[1], spot[2]); me.vy = 0; me.onGround = true; me.jumping = false; me.airT = 0; me.camY = me.pos.y;
-    me.ry = Math.PI; cam.yaw = 0; cam.pitch = Math.min(cam.pitch, 0.25); me.speed = 0;
+    me.ry = d.ry ?? Math.PI; cam.yaw = me.ry - Math.PI; cam.pitch = Math.min(cam.pitch, 0.25); me.speed = 0;
     sendNow();
     return { x: spot[0], y: spot[1], z: spot[2] };
   },
@@ -912,7 +939,7 @@ function updateCamera(dt) {
     if (viewMode === 'full') {
       const t = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
       d = Math.max((F.h / 2) / t, (F.w / 2) / (t * camera.aspect)) * 1.0;
-    } else d = zoneWall ? Math.min(bestD, 30) : bestD;
+    } else d = zoneLab ? bestL : zoneWall ? Math.min(bestD, 30) : bestD;
     const target = (viewMode === 'full' ? fullPos : bestPos).set(F.x + Math.sin(F.ry) * d, F.y, F.z + Math.cos(F.ry) * d);
     const k = viewMode === 'full' ? 1 : Math.min(1, dt * 6);
     camera.position.lerp(target, k);
@@ -951,6 +978,13 @@ function updateCamera(dt) {
     camera.position.x = THREE.MathUtils.clamp(camera.position.x, -13.7, 13.7);
     camera.position.z = Math.max(camera.position.z, -57.6);
   }
+  // 研究所、一樓電視店、樓梯間：相機不穿出牆面、天花板
+  if (zoneLab) {
+    const C = camera.position, p = me.pos, cl = THREE.MathUtils.clamp;
+    if (inLabRoom(p.x, p.y, p.z)) { C.x = cl(C.x, LAB_ROOM.x0 + 0.15, LAB_ROOM.x1 - 0.15); C.z = cl(C.z, LAB_ROOM.z0 + 0.15, LAB_ROOM.z1 - 0.12); C.y = cl(C.y, LAB_ROOM.y + 0.3, LAB_ROOM.top - 0.12); }
+    else if (inLabShop(p.x, p.y, p.z)) { C.x = cl(C.x, LAB_SHOP.x0 + 0.15, LAB_SHOP.x1 - 0.15); C.z = Math.max(C.z, LAB_SHOP.z0 + 0.15); if (C.z < 0) C.y = Math.min(C.y, LAB_SHOP.top - 0.12); }
+    else if (onLabStairs(p.x, p.z)) { C.x = cl(C.x, 64.25, 65.8); if (C.z < 0) C.z = Math.max(C.z, -8.65); }
+  }
   // 觀影館內：相機不穿出牆面與屋頂
   if (inTheater(me.pos.x, me.pos.z)) {
     const T_ = THEATER, I0 = T_.x0 + T_.t + 0.3, I1 = T_.x1 - T_.t - 0.3, Z0 = T_.z0 + T_.t + 0.3, Z1 = T_.z1 - T_.t - 0.3;
@@ -975,6 +1009,13 @@ function updateLabels(dt) {
 function updateVolume() {
   if (!soundOn) return;
   const z = me.pos.z, x = me.pos.x;
+  if (zoneLab) {
+    // 研究所裡全音量；樓梯、門口聽得到一點；街上幾乎聽不到
+    const y = me.pos.y;
+    const v = inLabRoom(x, y, z) ? 100 : onLabStairs(x, z) ? 18 + Math.max(0, y - 0.2) * 9 : Math.max(0, 10 - Math.hypot(x - 69, z + 4) * 0.6);
+    labScreen.setVolume(v * userVol / 100);
+    return;
+  }
   if (zoneWall) {
     // 觀影館內兩台都是全音量；在廣場上隨距離變小
     const tv = inTheater(x, z) ? 100 : Math.max(0, 40 - Math.hypot(x - THEATER.x1, z - 15) * 1.2);
@@ -988,6 +1029,7 @@ function updateVolume() {
   screen.setVolume(v * userVol / 100);
 }
 
+let lastLabVol = 0;
 const GATE_PTS = [];
 function frame() {
   const dt = Math.min(0.05, clock.getDelta()); const t = clock.elapsedTime; const now = performance.now();
@@ -1017,7 +1059,8 @@ function frame() {
       if (lbl !== sitLabel) { sitLabel = lbl; sb.textContent = lbl; sb.disabled = !nearSeat; sb.classList.toggle('taken', !nearSeat); }
     } else $('#btn-sit').classList.remove('hidden');
     saveSnapMaybe(now);
-    updateZone();
+    updateZone(); labTv.refresh();
+    if (zoneLab && now - lastLabVol > 300) { lastLabVol = now; updateVolume(); } // 上下樓梯時音量跟著變
     if (now - lastVideoTick > 4000) { lastVideoTick = now; for (const x of allScreens) x.tick(); updateVolume(); }
   } else {
     // 開場：環繞建築外觀
@@ -1073,4 +1116,4 @@ for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) jumpBtn.addEven
 jumpBtn.addEventListener('contextmenu', (e) => e.preventDefault());
 window.__hall = { sim: (n, dt = 1 / 60) => { // 測試用：不畫面、以固定時間步跑 n 幀的移動與裝備
   for (let i = 0; i < n; i++) { updateMe(dt); me.avatar.root.position.set(me.pos.x, me.pos.y + (me.seat ? 0.55 : 0), me.pos.z); me.avatar.root.rotation.y = me.ry; gear.poseMe(); gear.frame(dt, clock.elapsedTime, remotes.values()); }
-}, gear, tvSet, get tvL() { return tvL; }, tScreens, get zoneWall() { return zoneWall; }, setMode, seatView, travel, seatOcc, checkVersion, get media() { return mediaState; }, screen, dock, me, cam, camera, scene, world, remotes, toggleSit, collide, groundAt, freeSpot, chat, jump: () => { jumpQueued = performance.now(); }, get ws() { return ws; }, get viewMode() { return viewMode; }, enterFull, exitFull };
+}, gear, tvSet, get tvL() { return tvL; }, tScreens, get zoneWall() { return zoneWall; }, get zoneLab() { return zoneLab; }, labScreen, labTv, setMode, seatView, travel, seatOcc, checkVersion, get media() { return mediaState; }, screen, dock, me, cam, camera, scene, world, remotes, toggleSit, collide, groundAt, freeSpot, chat, jump: () => { jumpQueued = performance.now(); }, get ws() { return ws; }, get viewMode() { return viewMode; }, enterFull, exitFull };

@@ -10,7 +10,7 @@ function storedPw() {
 
 export function initAdminDock({ toast, onFocus, isTouch }) {
   const dock = $('#admin-dock'), panel = $('#ad-panel');
-  let pw = '', media = null, active = false, open = false, lights = true, tlights = true, wall = false, thAt = 0;
+  let pw = '', media = null, active = false, open = false, lights = true, tlights = true, llights = true, wall = false, zone = 'hall', thAt = 0;
   async function api(path, body) {
     const r = await fetch('/api/admin/' + path, {
       method: body ? 'POST' : 'GET', cache: 'no-store', credentials: 'same-origin',
@@ -42,17 +42,20 @@ export function initAdminDock({ toast, onFocus, isTouch }) {
     $('#ad-login-row').classList.remove('hidden'); $('#ad-logged').classList.add('hidden');
   }
   function render(st) {
-    const m = st.mode ? { mode: st.mode, video: st.video, music: st.music, countdown: st.countdown, theater: st.theater } : st;
+    const m = st.mode ? { mode: st.mode, video: st.video, music: st.music, countdown: st.countdown, theater: st.theater, lab: st.lab } : st;
     if (m && m.mode) setMedia(m);
     if (typeof st.lights === 'boolean') setLights(st.lights);
     if (typeof st.tlights === 'boolean') setTLights(st.tlights);
+    if (typeof st.llights === 'boolean') setLLights(st.llights);
+    if (st.lab && !st.mode) { media = { ...(media || {}), lab: st.lab }; renderLab(); }
   }
   // 室內燈按鈕：燈開著時顯示「關燈」（亮金色），關著時顯示「開燈」（暗色）
   // 殿堂與觀影館各一顆燈光按鈕
   function setLights(on) { lights = !!on; lightBtn(); }
   function setTLights(on) { tlights = !!on; lightBtn(); }
+  function setLLights(on) { llights = !!on; lightBtn(); }
   function lightBtn() {
-    for (const [id, v, name, offTxt] of [['#ad-lights', lights, '室內燈：', '💡 關燈'], ['#ad-tlights', tlights, '觀影館的燈：', '💡 關燈（留火把）']]) {
+    for (const [id, v, name, offTxt] of [['#ad-lights', lights, '室內燈：', '💡 關燈'], ['#ad-tlights', tlights, '觀影館的燈：', '💡 關燈（留火把）'], ['#ad-llights', llights, '研究所的燈：', '💡 關燈']]) {
       const b = $(id); if (!b) continue;
       b.textContent = v ? offTxt : '💡 開燈'; b.classList.toggle('off', !v);
       b.setAttribute('aria-pressed', String(v)); b.title = name + (v ? '開' : '關');
@@ -60,11 +63,11 @@ export function initAdminDock({ toast, onFocus, isTouch }) {
   }
   function setMedia(m) {
     media = m; if (!active) return;
-    thAt = performance.now(); renderTheater();
+    thAt = performance.now(); renderTheater(); renderLab();
     const isMusic = m.mode === 'music';
     const label = isMusic ? '音樂' : '比賽';
-    if (!wall) { $('#ad-mode').textContent = label; $('#ad-mode-mini').textContent = label; }
-    dock.classList.toggle('match', !isMusic && !wall);
+    if (zone === 'hall') { $('#ad-mode').textContent = label; $('#ad-mode-mini').textContent = label; }
+    dock.classList.toggle('match', !isMusic && zone === 'hall');
     let playing = false, title = '';
     if (isMusic) {
       const t = m.music && m.music.track; playing = !!(t && m.music.playing);
@@ -80,15 +83,32 @@ export function initAdminDock({ toast, onFocus, isTouch }) {
   }
   // ===== 觀影館（人在城牆區時）：螢幕 I、II =====
   // 依所在建築切換控制台內容：殿堂是一台大螢幕＋音樂＋燈光；觀影館是 I、II 兩台
-  function setZone(w) {
-    w = !!w; if (w === wall) return; wall = w;
-    dock.classList.toggle('wall', w);
-    $('#ad-hall').classList.toggle('hidden', w); $('#ad-th').classList.toggle('hidden', !w);
-    $('#ad-title').textContent = w ? '同時視聽控制' : '直播控制';
-    $('#ad-panel').setAttribute('aria-label', w ? '城牆觀影館控制' : '大螢幕控制');
-    if (w) { $('#ad-mode').textContent = 'I + II'; $('#ad-mode-mini').textContent = '同時視聽'; dock.classList.remove('match'); renderTheater(); }
+  // z：'hall' | 'wall' | 'lab'（舊呼叫傳 true／false 代表城牆區與否）
+  function setZone(z) {
+    z = z === true ? 'wall' : z === false ? 'hall' : z || 'hall';
+    if (z === zone) return; zone = z; wall = z === 'wall';
+    dock.classList.toggle('wall', wall); dock.classList.toggle('lab', z === 'lab');
+    $('#ad-hall').classList.toggle('hidden', z !== 'hall'); $('#ad-th').classList.toggle('hidden', z !== 'wall'); $('#ad-lab').classList.toggle('hidden', z !== 'lab');
+    $('#ad-title').textContent = { hall: '直播控制', wall: '同時視聽控制', lab: '研究所控制' }[z];
+    $('#ad-panel').setAttribute('aria-label', { hall: '大螢幕控制', wall: '城牆觀影館控制', lab: '研究所電視控制' }[z]);
+    if (z === 'wall') { $('#ad-mode').textContent = 'I + II'; $('#ad-mode-mini').textContent = '同時視聽'; dock.classList.remove('match'); renderTheater(); }
+    else if (z === 'lab') { $('#ad-mode').textContent = '映像管'; $('#ad-mode-mini').textContent = '研究所'; dock.classList.remove('match'); renderLab(); }
     else if (media) setMedia(media);
   }
+  // ===== 研究所（人在街道東段時）：映像管電視 =====
+  const labTv = () => (media && media.lab && media.lab.tv) || null;
+  function renderLab() {
+    if (!active || zone !== 'lab') return;
+    const L = (media && media.lab) || { list: [] }, c = labTv(), n = (L.list || []).length;
+    const pos = !c || c.live ? '' : ' · ' + clock(thPos(c));
+    $('#ad-lnow').textContent = c ? `${c.idx >= 0 ? `第 ${c.idx + 1}/${n} 集 · ` : ''}${c.live ? '直播 · ' : ''}${c.title || c.id}${pos}` : (n ? `片庫 ${n} 集 · 電視還沒開` : '片庫是空的（到研究所後台加片）');
+    $('#ad-lplay').innerHTML = c && c.playing ? ICON_PAUSE : ICON_PLAY; $('#ad-lplay').disabled = !c;
+    $('#ad-lplay').setAttribute('aria-label', c && c.playing ? '暫停' : '播放');
+    $('#ad-lback').disabled = !c || c.live; $('#ad-lfwd').disabled = !c || c.live;
+    $('#ad-lprev').disabled = !n || (c && c.idx === 0); $('#ad-lnext').disabled = !n || (c && c.idx >= n - 1);
+    const lk = $('#ad-llock'); lk.textContent = L.lock ? '🔒 遙控器已鎖定' : '🔓 遙控器開放中'; lk.classList.toggle('off', !!L.lock); lk.setAttribute('aria-pressed', String(!!L.lock));
+  }
+  setInterval(() => { if (open && zone === 'lab') renderLab(); }, 1000);
   const thCh = (k) => (media && media.theater && media.theater[k]) || null;
   const thPos = (c) => (!c || c.live ? 0 : c.position + (c.playing ? (performance.now() - thAt) / 1000 : 0));
   const clock = (s) => { s = Math.max(0, Math.floor(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); };
@@ -132,6 +152,24 @@ export function initAdminDock({ toast, onFocus, isTouch }) {
   $('#ad-next').addEventListener('click', () => act(() => api('music', { action: 'next' }), '下一首'));
   $('#ad-music').addEventListener('click', () => act(() => api('mode', { mode: 'music' }), '已回到大廳音樂'));
   $('#ad-lights').addEventListener('click', () => { const on = !lights; act(() => api('lights', { on }), on ? '室內燈已開' : '室內燈已關'); });
+  $('#ad-llights').addEventListener('click', () => { const on = !llights; act(() => api('lights', { on, zone: 'lab' }), on ? '研究所的燈已開' : '研究所已關燈，只剩電視的光'); });
+  const lab = (body, ok) => act(() => api('lab', body), ok);
+  $('#ad-lplay').addEventListener('click', () => { const c = labTv(); if (c) lab({ action: c.playing ? 'pause' : 'play' }, c.playing ? '電視已暫停' : '電視繼續播'); });
+  $('#ad-lback').addEventListener('click', () => lab({ action: 'skip', seconds: -10 }, '−10 秒'));
+  $('#ad-lfwd').addEventListener('click', () => lab({ action: 'skip', seconds: 10 }, '+10 秒'));
+  $('#ad-lprev').addEventListener('click', () => lab({ action: 'prev' }, '上一集'));
+  $('#ad-lnext').addEventListener('click', () => lab({ action: 'next' }, '下一集'));
+  $('#ad-llock').addEventListener('click', () => { const on = !(media && media.lab && media.lab.lock); lab({ action: 'lock', on }, on ? '已鎖定遙控器：觀眾只能看' : '已開放遙控器：研究所裡的人都能轉台'); });
+  $('#ad-lform').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const url = $('#ad-lurl').value.trim(); if (!url) return;
+    const also = $('#ad-ladd').checked;
+    act(async () => {
+      let r = await api('lab', { action: 'set', url, live: /\/live\//.test(url) });
+      if (also) r = await api('lab', { action: 'add', url });
+      $('#ad-lurl').value = ''; $('#ad-lurl').blur(); return r;
+    }, also ? '已播到電視，也加進片庫' : '已播到研究所的電視');
+  });
   $('#ad-tlights').addEventListener('click', () => { const on = !tlights; act(() => api('lights', { on, zone: 'wall' }), on ? '觀影館的燈已開' : '觀影館已關燈（留下火把）'); });
   for (const b of document.querySelectorAll('.ad-cp')) b.addEventListener('click', () => {
     const k = b.dataset.k, c = thCh(k); if (!c) return;
@@ -178,7 +216,7 @@ export function initAdminDock({ toast, onFocus, isTouch }) {
       $('#ad-pw').value = ''; $('#ad-login').classList.add('hidden');
       show(); render(st); setOpen(true);
       $('#help').classList.add('hidden');
-      toast && toast(wall ? '已登入管理員 · 右下角是同時視聽控制台' : '已登入管理員 · 右下角是直播控制台');
+      toast && toast(zone === 'wall' ? '已登入管理員 · 右下角是同時視聽控制台' : zone === 'lab' ? '已登入管理員 · 右下角是研究所控制台' : '已登入管理員 · 右下角是直播控制台');
     } catch (err) { pw = ''; $('#ad-login-msg').textContent = err.status === 401 ? '密碼錯誤' : '無法連線'; }
   });
   $('#btn-admin-logout').addEventListener('click', () => {
@@ -187,5 +225,5 @@ export function initAdminDock({ toast, onFocus, isTouch }) {
   });
 
   check();
-  return { setMedia, setLights, setTLights, setZone, check, get active() { return active; } };
+  return { setMedia, setLights, setTLights, setLLights, setZone, check, get active() { return active; } };
 }
