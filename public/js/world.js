@@ -9,6 +9,7 @@ import { buildTrophy } from './trophy.js';
 import { reliefPanel } from './relief.js';
 import { buildPoster } from './poster.js';
 import { buildWallDistrict, inTheater } from './district.js';
+import { buildLab, inLabRoom, inLabShop, LAB_EDGE } from './lab.js';
 
 export const SCREEN = { x: 0, y: 6.14, z: -57.9, w: 14, h: 7.875 };
 export const HALL = { x0: -14, x1: 14, z0: -58, z1: -6 };
@@ -26,7 +27,7 @@ const vaultYAt = (x) => VAULT.spring + VAULT.rise * Math.pow(Math.max(0, 1 - Mat
 
 // ---------- 室內燈光狀態（開燈／關燈兩種樣貌，約 1.5 秒平滑過渡） ----------
 // hooks：每幀呼叫 fn(e, inside, t)。e：1 = 開燈、0 = 關燈（已緩動）；inside：相機在室內的程度（0 街上 ~ 1 大廳內）
-const LIGHT = { target: 1, k: 1, hallT: 1, wallT: 1, zone: -1, hooks: [], cam: new THREE.Vector3(0, 6, 26), lastT: null }; // 殿堂與城牆觀影館各自一個開關
+const LIGHT = { target: 1, k: 1, hallT: 1, wallT: 1, labT: 1, zone: -1, hooks: [], cam: new THREE.Vector3(0, 6, 26), lastT: null }; // 殿堂與城牆觀影館各自一個開關
 const onLights = (fn) => LIGHT.hooks.push(fn);
 const lerp = (a, b, t) => a + (b - a) * t;
 const _c0 = new THREE.Color(), _c1 = new THREE.Color();
@@ -171,9 +172,10 @@ export function buildWorld(scene, renderer, q) {
   buildFacade(scene, anim, q);
   buildInterior(scene, anim, q, renderer);
   const district = buildWallDistrict(W, scene, anim, q);
+  const lab = buildLab(W, scene, anim, q);
 
   B.build(scene);
-  zoneLights(district);
+  zoneLights(district, lab);
 
   // 室內燈光開關：world.setLights(true|false)；預設開燈。相機位置由 scene.onBeforeRender 取得（不需要改 main.js）
   scene.onBeforeRender = (_r, _s, camera) => { LIGHT.cam.copy(camera.position); };
@@ -181,21 +183,28 @@ export function buildWorld(scene, renderer, q) {
   onLights((e, inside) => {
     // 半球光：街上永遠是夜晚；進到室內才換成室內的環境光
     // 城牆區的戶外：月光比較亮、偏冷，石牆才看得出質感
-    const nSky = ZONE.wall ? 0x8c9ad0 : night.sky, nGround = ZONE.wall ? 0x5c4c44 : night.ground, nI = ZONE.wall ? 0.95 : night.i;
+    const nSky = ZONE.wall ? 0x8c9ad0 : night.sky, nGround = ZONE.wall ? 0x5c4c44 : night.ground, nI = ZONE.wall ? 0.95 : ZONE.lab ? 0.5 : night.i;
+    if (ZONE.lab) { // 研究所：日光燈的冷白；關燈時只剩一點點窗外的街燈
+      mixColor(hemi.color, 0x3a4060, 0xf4f4ee, e).lerp(_c1.set(nSky), 1 - inside);
+      mixColor(hemi.groundColor, 0x241e22, 0xc8bba0, e).lerp(_c1.set(nGround), 1 - inside);
+      hemi.intensity = lerp(nI, lerp(0.1, 0.85, e), inside);
+      return;
+    }
     mixColor(hemi.color, 0x64548a, 0xfff2de, e).lerp(_c1.set(nSky), 1 - inside);
     mixColor(hemi.groundColor, 0x3c2832, 0xe9d9bd, e).lerp(_c1.set(nGround), 1 - inside);
     hemi.intensity = lerp(nI, ZONE.wall ? lerp(0.13, 0.75, e) : lerp(0.2, 1.15, e), inside);
   });
   const stepLights = (t) => {
     const dt = LIGHT.lastT === null ? 0 : Math.min(0.5, Math.max(0, t - LIGHT.lastT)); LIGHT.lastT = t;
-    const zw = LIGHT.cam.x < -69 ? 1 : 0;
-    LIGHT.target = zw ? LIGHT.wallT : LIGHT.hallT;
+    const zw = LIGHT.cam.x < -69 ? 1 : LIGHT.cam.x > LAB_EDGE ? 2 : 0;
+    LIGHT.target = zw === 1 ? LIGHT.wallT : zw === 2 ? LIGHT.labT : LIGHT.hallT;
     if (zw !== LIGHT.zone) { LIGHT.zone = zw; LIGHT.k = LIGHT.target; } // 換區（看不到另一區）：直接套用那一區的燈
     if (LIGHT.k !== LIGHT.target) LIGHT.k = LIGHT.k < LIGHT.target ? Math.min(LIGHT.target, LIGHT.k + dt / 1.5) : Math.max(LIGHT.target, LIGHT.k - dt / 1.5);
     const e = LIGHT.k * LIGHT.k * (3 - 2 * LIGHT.k);
     const c = LIGHT.cam;
-    ZONE.wall = c.x < -69 ? 1 : 0;
-    const inside = Math.abs(c.x) < 15 ? THREE.MathUtils.smoothstep(-c.z, -0.5, 3.5) : inTheater(c.x, c.z) ? 1 : 0;
+    ZONE.wall = c.x < -69 ? 1 : 0; ZONE.lab = c.x > LAB_EDGE ? 1 : 0;
+    // 研究所的燈只管二樓室內；一樓電視店一直開著（店裡的燈 on/off 一樣亮）
+    const inside = Math.abs(c.x) < 15 ? THREE.MathUtils.smoothstep(-c.z, -0.5, 3.5) : inTheater(c.x, c.z) ? 1 : inLabRoom(c.x, c.y, c.z) ? 1 : inLabShop(c.x, c.y, c.z) ? 0.5 : 0;
     for (const f of LIGHT.hooks) f(e, inside, t);
   };
   anim.push(stepLights);
@@ -205,6 +214,8 @@ export function buildWorld(scene, renderer, q) {
     // on：true 開燈、false 關燈；instant：true 時不做過渡（例如剛連線時套用伺服器狀態）
     setLights(on, instant = false) { LIGHT.hallT = on ? 1 : 0; if (instant && !LIGHT.zone) LIGHT.k = LIGHT.hallT; return LIGHT.hallT === 1; },
     setWallLights(on, instant = false) { LIGHT.wallT = on ? 1 : 0; if (instant && LIGHT.zone === 1) LIGHT.k = LIGHT.wallT; return LIGHT.wallT === 1; },
+    setLabLights(on, instant = false) { LIGHT.labT = on ? 1 : 0; if (instant && LIGHT.zone === 2) LIGHT.k = LIGHT.labT; return LIGHT.labT === 1; },
+    get labLightsOn() { return LIGHT.labT === 1; },
     get lightsOn() { return LIGHT.hallT === 1; },
     get wallLightsOn() { return LIGHT.wallT === 1; },
     get lightLevel() { return LIGHT.k; },
@@ -246,8 +257,8 @@ function buildStreet(scene, anim) {
   box(-66, -0.3, 22, 160, 0.19, 22.2, 'curb');
   floors.push({ x0: -66, x1: 160, z0: 0, z1: 8, y: 0.15 });
   floors.push({ x0: -66, x1: 160, z0: 22, z1: 30, y: 0.15 });
-  // 邊界（西邊是城牆，由 district.js 負責碰撞）
-  solidOnly(-66, -1, 29.5, 160, 50, 30.5); solidOnly(59, -1, -2, 61, 50, 32);
+  // 邊界（西邊是城牆，由 district.js 負責碰撞；東邊街底由 lab.js 負責）
+  solidOnly(-66, -1, 29.5, 160, 50, 30.5); // 東邊的邊界在 lab.js（街道延伸到秋葉原後巷）
   // 道路標線
   // 標線厚 3cm（埋入路面 1cm），遠看不會與路面搶深度；斑馬線範圍內不畫中線與邊線
   const PY0 = -0.01, PY1 = 0.03;
@@ -1299,15 +1310,18 @@ export function setScene(s) { scene_ = s; }
 // 光源數量不變，shader 不必重新編譯，也不會多出逐像素的燈光成本
 let SKYLINE = null, HALL_RAL = null;
 const POOL = []; // 可借用的點光源
-export const ZONE = { wall: 0 };
-function zoneLights(district) {
+export const ZONE = { wall: 0, lab: 0 };
+export const LAB_TV_GLOW = { k: 0.25 }; // 研究所電視的面光源強度（main.js 依電視有沒有在播設定）
+function zoneLights(district, lab) {
   const home = POOL.map((l) => ({ p: l.position.clone(), d: l.distance }));
   const ralHome = HALL_RAL ? { p: HALL_RAL.position.clone(), q: HALL_RAL.quaternion.clone(), w: HALL_RAL.width, h: HALL_RAL.height, c: HALL_RAL.color.getHex() } : null;
   // 城牆區的光源比可借用的燈多：每走一段距離就改借給離相機最近的那幾盞（shader 的燈數不變）
-  const all = district.lights; let alt = []; const at = new THREE.Vector3(1e9, 0, 0);
+  let all = district.lights, alt = []; const at = new THREE.Vector3(1e9, 0, 0);
   const pick = () => {
     const c = LIGHT.cam; at.copy(c);
-    const near = all.map((a) => [a, (a.x - c.x) ** 2 + (a.z - c.z) ** 2]).sort((p, q) => p[1] - q[1]).slice(0, POOL.length).map((p) => p[0]);
+    // lvl：只照一樓或二樓的燈（點光源沒有陰影，會穿過樓板）；依相機在哪一層挑
+    const lv = c.y > 3.4 ? 2 : 1; at.y = lv;
+    const near = all.filter((a) => !a.lvl || a.lvl === lv).map((a) => [a, (a.x - c.x) ** 2 + (a.z - c.z) ** 2]).sort((p, q) => p[1] - q[1]).slice(0, POOL.length).map((p) => p[0]);
     // 盡量保留原本已借的位置，只替換掉離開範圍的，避免燈光跳來跳去
     const keep = alt.map((a) => (near.includes(a) ? a : null)), rest = near.filter((a) => !keep.includes(a));
     alt = POOL.map((_, i) => keep[i] || rest.shift() || null);
@@ -1315,8 +1329,8 @@ function zoneLights(district) {
   };
   let was = -1;
   onLights((e, _in, t) => {
-    const z = ZONE.wall;
-    if (SKYLINE) SKYLINE.visible = !z;
+    const z = ZONE.wall ? 1 : ZONE.lab ? 2 : 0;
+    if (SKYLINE) SKYLINE.visible = z !== 1;
     if (!z) {
       if (was !== 0) {
         POOL.forEach((l, i) => { l.position.copy(home[i].p); l.distance = home[i].d; });
@@ -1324,17 +1338,20 @@ function zoneLights(district) {
       }
       was = 0; return; // 殿堂內的燈由原本的 hook 設定顏色與強度
     }
-    if (was !== 1 || at.distanceToSquared(LIGHT.cam) > 25) pick();
-    if (was !== 1) {
-      if (HALL_RAL) { const r = district.ral; HALL_RAL.position.set(r.x, r.y, r.z); HALL_RAL.lookAt(r.x + 10, r.y, r.z); HALL_RAL.width = r.w; HALL_RAL.height = r.h; HALL_RAL.color.setHex(0xbfc8ff); }
-      was = 1;
+    if (was !== z) { all = z === 2 ? lab.lights : district.lights; alt = []; }
+    if (was !== z || (z === 2 && (LIGHT.cam.y > 3.4 ? 2 : 1) !== at.y) || Math.hypot(at.x - LIGHT.cam.x, at.z - LIGHT.cam.z) > 5) pick();
+    if (was !== z) {
+      // 殿堂大螢幕的面光源：城牆區借給觀影館的雙螢幕、研究所借給映像管電視
+      if (HALL_RAL && z === 1) { const r = district.ral; HALL_RAL.position.set(r.x, r.y, r.z); HALL_RAL.lookAt(r.x + 10, r.y, r.z); HALL_RAL.width = r.w; HALL_RAL.height = r.h; HALL_RAL.color.setHex(0xbfc8ff); }
+      if (HALL_RAL && z === 2) { const r = lab.tv; HALL_RAL.position.set(r.x, r.y, r.z); HALL_RAL.lookAt(r.x - 10, r.y, r.z); HALL_RAL.width = r.w; HALL_RAL.height = r.h; HALL_RAL.color.setHex(0xa8c4ff); }
+      was = z;
     }
     POOL.forEach((l, i) => {
       const a = alt[i]; if (!a) { l.intensity = 0; return; }
       const fl = a.flick ? 1 + a.flick * (Math.sin(t * 13 + i * 2.1) * 0.08 + Math.sin(t * 29 + i) * 0.05) : 1;
       mixColor(l.color, a.off[0], a.on[0], e); l.intensity = lerp(a.off[1], a.on[1], e) * fl;
     });
-    if (HALL_RAL) HALL_RAL.intensity = lerp(3.0, 1.6, e);
+    if (HALL_RAL) HALL_RAL.intensity = z === 2 ? LAB_TV_GLOW.k * lerp(26, 10, e) : lerp(3.0, 1.6, e);
   });
 }
 // 給 district.js 使用的建模工具

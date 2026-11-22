@@ -68,9 +68,16 @@ const defaults = {
   tlights: true, // 城牆觀影館的燈（同時視聽後台控制；關燈時只留牆上火把與壁爐）
   // 城牆區觀影館：兩台螢幕各自獨立的播放時鐘（同時視聽：A＝作品畫面、B＝實況）
   theater: { a: null, b: null }, // { id, live, title, playing, startedAt, pausedAt, dur, seq, gain }
+  // 研究所（秋葉原老樓二樓）：一台映像管電視，研究所裡的人一起看；片庫由研究所後台管理，觀眾可用遙控器選集（可鎖定）
+  lab: { tv: null, list: [], lock: false, auto: true }, // tv: { id, live, title, playing, startedAt, pausedAt, dur, seq, gain, idx }
+  llights: true, // 研究所的日光燈（研究所後台控制）
   // 「我的螢幕」頻道選單（觀眾個人播放用）：[{ id?, handle?, name, tag }]
   channels: DEFAULT_CHANNELS,
 };
+const LAB_LIST_MAX = 120;
+// 研究所房間（二樓）的範圍：與 public/js/lab.js 的 LAB_ROOM 一致；觀眾要站在這裡面才能用遙控器
+const LAB_ROOM = { x0: 66.2, x1: 75.8, z0: -10.8, z1: -0.2, y0: 3.0 };
+const inLabRoom = (p) => p.x > LAB_ROOM.x0 && p.x < LAB_ROOM.x1 && p.z > LAB_ROOM.z0 && p.z < LAB_ROOM.z1 && p.y > LAB_ROOM.y0;
 let state = structuredClone(defaults);
 try {
   const saved = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
@@ -79,6 +86,12 @@ try {
   if (state.mode !== 'match') state.mode = 'music';
   if (typeof state.lights !== 'boolean') state.lights = true;
   if (typeof state.tlights !== 'boolean') state.tlights = true;
+  if (typeof state.llights !== 'boolean') state.llights = true;
+  state.lab = { ...structuredClone(defaults.lab), ...(state.lab && typeof state.lab === 'object' ? state.lab : {}) };
+  if (!Array.isArray(state.lab.list)) state.lab.list = [];
+  state.lab.list = state.lab.list.filter(x => x && /^[\w-]{11}$/.test(x.id)).slice(0, LAB_LIST_MAX);
+  if (!state.lab.tv || !state.lab.tv.id) state.lab.tv = null;
+  state.lab.lock = !!state.lab.lock; state.lab.auto = state.lab.auto !== false;
   if (!state.theater || typeof state.theater !== 'object') state.theater = { a: null, b: null };
   for (const k of ['a', 'b']) if (!state.theater[k] || !state.theater[k].id) state.theater[k] = null;
   if (!Array.isArray(state.channels)) state.channels = structuredClone(DEFAULT_CHANNELS);
@@ -160,11 +173,48 @@ function publicTheaterCh(c, now) {
 const HALL_LOCK_MS = Number(process.env.HALL_LOCK_MS || 60000);
 const hallAdmin = { epoch: 0, lockUntil: 0 };
 function touchHallAdmin() { hallAdmin.epoch++; hallAdmin.lockUntil = Date.now() + HALL_LOCK_MS; }
+function publicLab() {
+  const L = state.lab, now = Date.now();
+  const tv = L.tv ? { ...publicTheaterCh(L.tv, now), idx: L.tv.idx ?? -1 } : null;
+  return { tv, list: L.list.map(x => ({ id: x.id, title: x.title || '', live: !!x.live })), lock: L.lock, auto: L.auto };
+}
+// 研究所電視換片：idx 是片庫裡的第幾集（-1 = 直接貼網址播的）
+function labPlay(item, idx, start = 0) {
+  const gain = state.lab.tv?.gain ?? 100, now = Date.now();
+  state.lab.tv = { id: item.id, live: !!item.live, title: item.title || '', playing: true, startedAt: now - start * 1000, pausedAt: start, dur: item.dur || 0, seq: ++state.seq, gain, idx };
+}
+// 研究所電視的操作（管理員與觀眾的遙控器共用）；回傳錯誤訊息或空字串
+function labAction(a, body) {
+  const L = state.lab, c = L.tv, now = Date.now();
+  const num = (v) => (typeof v === 'number' || (typeof v === 'string' && v.trim() !== '')) && Number.isFinite(Number(v)) && Math.abs(Number(v)) < 1e7;
+  switch (a) {
+    case 'pick': {
+      const i = int(body.index);
+      if (!(i >= 0 && i < L.list.length)) return '片庫裡沒有這一集';
+      labPlay(L.list[i], i); return '';
+    }
+    case 'next': case 'prev': {
+      if (!L.list.length) return '片庫是空的';
+      const cur = c && c.idx >= 0 ? c.idx : (a === 'next' ? -1 : L.list.length);
+      const i = cur + (a === 'next' ? 1 : -1);
+      if (i < 0 || i >= L.list.length) return a === 'next' ? '已經是最後一集' : '已經是第一集';
+      labPlay(L.list[i], i); return '';
+    }
+    case 'play': if (!c) return '電視還沒有片子'; if (!c.playing) { c.playing = true; c.startedAt = now - c.pausedAt * 1000; } return '';
+    case 'pause': if (!c) return '電視還沒有片子'; if (c.playing) { c.playing = false; c.pausedAt = theaterPos(c, now); } return '';
+    case 'toggle': return labAction(c && c.playing ? 'pause' : 'play', body);
+    case 'restart': if (!c) return '電視還沒有片子'; theaterSet(c, 0, now); c.playing = true; return '';
+    case 'seek': if (!c) return '電視還沒有片子'; if (!num(body.seconds)) return '進度需為有效秒數'; if (c.live) return '直播不能跳轉'; theaterSet(c, Number(body.seconds), now); return '';
+    case 'skip': if (!c) return '電視還沒有片子'; if (!num(body.seconds)) return '進度需為有效秒數'; if (c.live) return '直播不能跳轉'; theaterSet(c, theaterPos(c, now) + Number(body.seconds), now); return '';
+  }
+  return 'unknown action';
+}
 function publicTheater() { const now = Date.now(); return { a: publicTheaterCh(state.theater.a, now), b: publicTheaterCh(state.theater.b, now) }; }
 function publicMedia() {
   const m = state.music, t = curTrack(), cd = state.countdown;
   return {
     theater: publicTheater(),
+    lab: publicLab(),
     hallAdmin: { ...hallAdmin },
     mode: state.mode, serverTime: Date.now(),
     video: publicVideo(),
@@ -184,8 +234,9 @@ function adminState() {
     mode: state.mode, serverTime: Date.now(), version: VERSION,
     music: { ...publicMedia().music, list: state.music.list.map(x => ({ id: x.id, title: x.title || '', live: !!x.live, dur: x.dur || 0 })) },
     countdown: state.countdown ? { ...state.countdown } : null,
-    lights: state.lights, tlights: state.tlights,
+    lights: state.lights, tlights: state.tlights, llights: state.llights,
     theater: publicTheater(),
+    lab: publicLab(),
     channels: state.channels,
   };
 }
@@ -325,7 +376,7 @@ function admit(ws) {
   ws._playerId = p.id;
   send(ws, {
     t: 'welcome', id: p.id, name, serverTime: Date.now(), media: publicMedia(), video: publicVideo(), max: state.maxUsers,
-    token: signToken(uid), version: VERSION, seats: seatList(), gears: gearList(), lights: state.lights, tlights: state.tlights,
+    token: signToken(uid), version: VERSION, seats: seatList(), gears: gearList(), lights: state.lights, tlights: state.tlights, llights: state.llights,
     players: [...players.values()].filter(o => o.id !== p.id && o.ws).map(o => ({ id: o.id, c: o.color, n: o.name, x: o.x, y: o.y, z: o.z, ry: o.ry, a: o.anim, g: o.g || 0 })),
   });
   broadcast({ t: 'join', id: p.id, c: p.color, n: name, x: p.x, y: p.y, z: p.z, ry: p.ry }, ws);
@@ -398,12 +449,53 @@ const server = http.createServer(async (req, res) => {
     if (['/api/admin/video', '/api/admin/control', '/api/admin/music', '/api/admin/mode', '/api/admin/countdown'].includes(p)) touchHallAdmin();
     if (p === '/api/admin/lights') {
       // 室內燈：{ on: true|false } 或 { toggle: true }；zone: 'wall' 是城牆觀影館的燈（廣播 t:'tlights'），否則是殿堂（t:'lights'）；不動播放狀態
-      const k = body.zone === 'wall' ? 'tlights' : 'lights';
+      const k = body.zone === 'wall' ? 'tlights' : body.zone === 'lab' ? 'llights' : 'lights';
       if (body.toggle === true) state[k] = !state[k];
       else if (typeof body.on === 'boolean') state[k] = body.on;
       else return json(res, 400, { error: '請提供 on（true／false）或 toggle: true' });
       save();
       broadcast({ t: k, on: state[k] });
+      return json(res, 200, adminState());
+    }
+    if (p === '/api/admin/lab') {
+      // 研究所後台：電視（set／pick／next／prev／play／pause／toggle／restart／seek／skip／clear／gain）、片庫（add／remove／move／clearList）、遙控器（lock／auto）
+      const L = state.lab, a = String(body.action || '');
+      let err = '';
+      if (a === 'set') {
+        const parsed = parseYouTube(body.url);
+        if (!parsed) return json(res, 400, { error: '無法辨識的 YouTube 網址' });
+        const start = Number(body.start ?? parsed.start);
+        labPlay({ id: parsed.id, live: !!(body.live ?? parsed.live), title: cleanText(body.title, 120) }, -1, Number.isFinite(start) && start > 0 ? start : 0);
+      } else if (a === 'clear') L.tv = null;
+      else if (a === 'gain') {
+        const g = Number(body.gain);
+        if (!L.tv) err = '電視還沒有片子'; else if (!Number.isFinite(g) || g < 0 || g > 100) err = '音量需為 0–100'; else L.tv.gain = Math.round(g);
+      } else if (a === 'add') {
+        const parsed = parseYouTube(body.url);
+        if (!parsed) return json(res, 400, { error: '無法辨識的 YouTube 網址' });
+        if (L.list.length >= LAB_LIST_MAX) return json(res, 400, { error: `片庫最多 ${LAB_LIST_MAX} 集` });
+        L.list.push({ id: parsed.id, title: cleanText(body.title, 120), live: !!(body.live ?? parsed.live) });
+      } else if (a === 'remove' || a === 'move') {
+        const i = int(body.index);
+        if (!(i >= 0 && i < L.list.length)) return json(res, 400, { error: '沒有這一集' });
+        let j = i;
+        if (a === 'remove') L.list.splice(i, 1);
+        else { j = i + (Number(body.dir) < 0 ? -1 : 1); if (j < 0 || j >= L.list.length) return json(res, 200, adminState()); [L.list[i], L.list[j]] = [L.list[j], L.list[i]]; }
+        // 電視正在播的那一集跟著移動，避免「下一集」跳錯
+        if (L.tv && L.tv.idx >= 0) {
+          if (a === 'remove') { if (L.tv.idx === i) L.tv.idx = -1; else if (L.tv.idx > i) L.tv.idx--; }
+          else if (L.tv.idx === i) L.tv.idx = j; else if (L.tv.idx === j) L.tv.idx = i;
+        }
+      } else if (a === 'rename') {
+        const i = int(body.index);
+        if (!(i >= 0 && i < L.list.length)) return json(res, 400, { error: '沒有這一集' });
+        L.list[i].title = cleanText(body.title, 120);
+      } else if (a === 'clearList') { L.list = []; if (L.tv) L.tv.idx = -1; }
+      else if (a === 'lock') L.lock = !!body.on;
+      else if (a === 'auto') L.auto = !!body.on;
+      else err = labAction(a, body);
+      if (err) return json(res, 400, { error: err });
+      save(); broadcastMedia();
       return json(res, 200, adminState());
     }
     if (p === '/api/admin/theater') {
@@ -586,7 +678,7 @@ const server = http.createServer(async (req, res) => {
 
   // ----- 靜態檔案 -----
   // /admin/hall（光之殿堂工作台）、/admin/theater（城牆觀影館工作台）都是同一頁，由前端依網址切換
-  let file = p === '/' ? '/index.html' : /^\/admin(\/(hall|theater|wall))?\/?$/.test(p) ? '/admin.html' : p;
+  let file = p === '/' ? '/index.html' : /^\/admin(\/(hall|theater|wall|lab))?\/?$/.test(p) ? '/admin.html' : p;
   if (file.startsWith('/vendor/three/')) {
     file = path.join(__dirname, 'node_modules', 'three', file.slice('/vendor/three/'.length));
     if (!file.startsWith(path.join(__dirname, 'node_modules', 'three'))) return json(res, 403, {});
@@ -669,9 +761,22 @@ wss.on('connection', (ws) => {
       const k = m.k === 'tp' ? 'tp' : m.k === 'recall' ? 'recall' : null;
       const s = ['start', 'cancel', 'done'].includes(m.s) ? m.s : null;
       const d = int(m.d);
-      if (!k || !s || !(d >= -1 && d <= 9)) return;
+      if (!k || !s || !(d >= -1 && d <= 19)) return;
       ws._fx.push(now);
       broadcast({ t: 'fx', id: p.id, k, s, d }, ws);
+    } else if (m.t === 'lab') {
+      // 研究所電視的遙控器：要站在研究所裡、沒有被後台鎖定；限流 1.2 秒一次
+      const now = Date.now();
+      const a = ['pick', 'next', 'prev', 'toggle', 'play', 'pause', 'skip', 'restart'].includes(m.a) ? m.a : null;
+      if (!a) return;
+      if (state.lab.lock && !ws._admin) return send(ws, { t: 'labNo', why: 'lock' });
+      if (!inLabRoom(p)) return send(ws, { t: 'labNo', why: 'far' });
+      if (now - (ws._labAt || 0) < 1200) return send(ws, { t: 'labNo', why: 'busy' });
+      const err = labAction(a, { index: m.i, seconds: Math.max(-60, Math.min(60, Number(m.s) || 0)) });
+      if (err) return send(ws, { t: 'labNo', why: 'err', msg: err });
+      ws._labAt = now;
+      save(); broadcastMedia();
+      broadcast({ t: 'labFx', id: p.id, n: p.name, a, i: state.lab.tv ? state.lab.tv.idx : -1 });
     } else if (m.t === 'wave') {
       broadcast({ t: 'wave', id: p.id }, ws);
     } else if (m.t === 'chat') {
@@ -708,6 +813,20 @@ wss.on('connection', (ws) => {
 // 播放回報：用戶端的 YouTube 播放器回報片長（dur）、播完（ended）、無法播放（err）
 // 以 seq 判斷是不是「目前這一次播放」，過時或重複的回報一律忽略
 function onMediaReport(m) {
+  // 研究所電視：記錄片長；播完時若開著「自動播下一集」就接著播
+  { const c = state.lab.tv;
+    if (c && !c.live && Number(m.seq) === c.seq && (!m.id || m.id === c.id)) {
+      if (m.t === 'dur') {
+        const s = Number(m.seconds);
+        if (!c.dur && Number.isFinite(s) && s >= 5 && s <= 12 * 3600) { c.dur = Math.round(s * 10) / 10; const it = state.lab.list[c.idx]; if (it && it.id === c.id) it.dur = c.dur; save(); }
+        if (!c.title && m.title) { const t = cleanText(m.title, 120); if (t) { c.title = t; const it = state.lab.list[c.idx]; if (it && it.id === c.id && !it.title) it.title = t; save(); broadcastMedia(); } }
+      } else if (m.t === 'ended' && c.playing) {
+        const pos = clockPos(c);
+        if (c.dur ? pos >= c.dur - 10 : pos >= 3) labEnded();
+      }
+      return;
+    }
+  }
   // 觀影館：記錄片長；播完就停在片尾（不自動換片）
   for (const k of ['a', 'b']) {
     const c = state.theater[k];
@@ -736,6 +855,14 @@ function onMediaReport(m) {
   } else if (m.t === 'err') {
     if (!it.dur && !it.errAt) it.errAt = Date.now();
   }
+}
+
+// 研究所電視播完：自動播下一集，沒有下一集就停在片尾
+function labEnded() {
+  const L = state.lab, c = L.tv; if (!c) return;
+  if (L.auto && c.idx >= 0 && c.idx + 1 < L.list.length) labPlay(L.list[c.idx + 1], c.idx + 1);
+  else { c.playing = false; c.pausedAt = c.dur || clockPos(c); }
+  save(); broadcastMedia();
 }
 
 // 位置廣播（只有在線的玩家；斷線保留中的人不會出現）
@@ -771,6 +898,7 @@ setInterval(() => {
     const c = state.theater[k];
     if (c && !c.live && c.playing && c.dur && clockPos(c) >= c.dur + 1.5) { c.playing = false; c.pausedAt = c.dur; save(); broadcastMedia(); }
   }
+  { const c = state.lab.tv; if (c && !c.live && c.playing && c.dur && clockPos(c) >= c.dur + 1.5) labEnded(); }
   const cur = currentMedia();
   if (cur && !cur.live && cur.clock.playing) {
     const pos = clockPos(cur.clock);
