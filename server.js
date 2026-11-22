@@ -239,6 +239,10 @@ const players = new Map(); // id -> { id, uid, ws, color, name, x,y,z, ry, anim,
 const byUid = new Map(); // uid -> player
 const queue = []; // 等候進場的 ws（ws._prio 為 true 的排在前面）
 const seats = new Map(); // seatIndex -> player id（一人一椅，伺服器為準）
+// 立體機動裝置：城牆區裝備庫的六組裝備，一人最多借一組（伺服器為準）；離線（保留期過後）自動歸還
+const GEAR_MAX = 6;
+const ARMORY = { x: -75.6, z: 6.1 }; // 借用／歸還要站在裝備庫附近
+const gears = new Map(); // slot -> player id
 let nextId = 1;
 
 const connectedCount = () => { let n = 0; for (const p of players.values()) if (p.ws) n++; return n; };
@@ -269,6 +273,17 @@ function broadcastQueue() {
 }
 const seatList = () => [...seats.entries()];
 function broadcastSeats() { broadcast({ t: 'seats', s: seatList() }); }
+const gearList = () => [...gears.entries()];
+function broadcastGears() { broadcast({ t: 'gears', s: gearList() }); }
+function freeGearOf(id) { let c = false; for (const [i, pid] of gears) if (pid === id) { gears.delete(i); c = true; } return c; }
+const nearArmory = (p) => Math.hypot(p.x - ARMORY.x, p.z - ARMORY.z) < 7;
+// 位置訊息裡的裝備狀態：[旗標, 左勾 x,y,z, 右勾 x,y,z, 貼牆法線 nx, nz]
+function cleanGear(g) {
+  if (!Array.isArray(g) || !g.length || g.length > 9) return 0;
+  const out = [];
+  for (const v of g) { if (!Number.isFinite(v)) return 0; out.push(Math.round(Math.max(-400, Math.min(400, v)) * 100) / 100); }
+  return out;
+}
 function freeSeatsOf(id) {
   let changed = false;
   for (const [i, pid] of seats) if (pid === id) { seats.delete(i); changed = true; }
@@ -298,8 +313,8 @@ function admit(ws) {
   ws._playerId = p.id;
   send(ws, {
     t: 'welcome', id: p.id, name, serverTime: Date.now(), media: publicMedia(), video: publicVideo(), max: state.maxUsers,
-    token: signToken(uid), version: VERSION, seats: seatList(), lights: state.lights,
-    players: [...players.values()].filter(o => o.id !== p.id && o.ws).map(o => ({ id: o.id, c: o.color, n: o.name, x: o.x, y: o.y, z: o.z, ry: o.ry, a: o.anim })),
+    token: signToken(uid), version: VERSION, seats: seatList(), gears: gearList(), lights: state.lights,
+    players: [...players.values()].filter(o => o.id !== p.id && o.ws).map(o => ({ id: o.id, c: o.color, n: o.name, x: o.x, y: o.y, z: o.z, ry: o.ry, a: o.anim, g: o.g || 0 })),
   });
   broadcast({ t: 'join', id: p.id, c: p.color, n: name, x: p.x, y: p.y, z: p.z, ry: p.ry }, ws);
 }
@@ -318,6 +333,7 @@ function tryAdmitQueue() {
 function dropPlayer(p) {
   players.delete(p.id); if (byUid.get(p.uid) === p) byUid.delete(p.uid);
   if (freeSeatsOf(p.id)) broadcastSeats();
+  if (freeGearOf(p.id)) broadcastGears();
 }
 
 // ---------- HTTP ----------
@@ -580,7 +596,7 @@ wss.on('connection', (ws) => {
     const p = playerOf(ws); if (!p) return;
     if (m.t === 'p') {
       const n = (v, lim) => (Number.isFinite(v) ? Math.max(-lim, Math.min(lim, v)) : 0);
-      p.x = n(m.x, 200); p.y = n(m.y, 50); p.z = n(m.z, 200); p.ry = n(m.ry, 20); p.anim = n(m.a, 10);
+      p.x = n(m.x, 400); p.y = n(m.y, 120); p.z = n(m.z, 400); p.ry = n(m.ry, 20); p.anim = n(m.a, 10); p.g = cleanGear(m.g);
       // 不是坐著的姿勢（a≠5）就代表離開椅子了
       if (!(p.anim > 4.5 && p.anim < 5.5) && freeSeatsOf(p.id)) broadcastSeats();
     } else if (m.t === 'sit') {
@@ -590,6 +606,16 @@ wss.on('connection', (ws) => {
       if (owner && owner !== p.id && players.has(owner)) return send(ws, { t: 'sitNo', seat: i });
       freeSeatsOf(p.id); seats.set(i, p.id);
       send(ws, { t: 'sitOk', seat: i }); broadcastSeats();
+    } else if (m.t === 'gear') {
+      // 借用（take: 格位）／歸還（ret）：都要站在裝備庫附近
+      if (!nearArmory(p)) return send(ws, { t: 'gearNo', why: 'far' });
+      if (m.ret) { const had = freeGearOf(p.id); send(ws, { t: 'gearOk', slot: -1 }); if (had) broadcastGears(); return; }
+      const i = int(m.take);
+      if (!(i >= 0 && i < GEAR_MAX)) return send(ws, { t: 'gearNo', why: 'bad' });
+      for (const [k, pid] of gears) if (pid === p.id) return send(ws, { t: 'gearOk', slot: k }); // 已經借了一組
+      const owner = gears.get(i);
+      if (owner && owner !== p.id && players.has(owner)) return send(ws, { t: 'gearNo', why: 'taken', slot: i });
+      gears.set(i, p.id); send(ws, { t: 'gearOk', slot: i }); broadcastGears();
     } else if (m.t === 'stand') {
       if (freeSeatsOf(p.id)) broadcastSeats();
     } else if (m.t === 'fx') {
@@ -673,7 +699,7 @@ function onMediaReport(m) {
 setInterval(() => {
   if (!players.size) return;
   const list = [];
-  for (const p of players.values()) if (p.ws) list.push([p.id, +p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2), +p.ry.toFixed(2), +p.anim.toFixed(2)]);
+  for (const p of players.values()) if (p.ws) { const e = [p.id, +p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2), +p.ry.toFixed(2), +p.anim.toFixed(2)]; if (p.g) e.push(p.g); list.push(e); }
   broadcast({ t: 's', p: list, n: list.length });
 }, TICK_MS);
 // 心跳：每 2 秒 ping 一次，超過 11 秒沒有任何回應（pong 或訊息）就視為斷線（分頁被直接關掉、網路中斷時不會留下幽靈角色）

@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { radial } from './textures.js';
 import { Labels } from './labels.js';
+import { buildGearModel } from './gear-model.js';
 
 export const COLORS = {
   pink: { body: 0xffa9c6, sheen: 0xffe0ec, emissive: 0x3a0f20 },
@@ -72,6 +73,12 @@ export class Avatar {
     this.air = 0; this.wasAir = false; this.land = 0; // 跳躍姿勢、落地的壓扁回彈
     this.labels = null;
   }
+  // 立體機動裝置：穿上／卸下（模型跟著身體一起彈跳）
+  setGear(on) {
+    if (on && !this.gear) { this.gear = buildGearModel(); this.pivot.add(this.gear); }
+    if (this.gear) this.gear.visible = !!on;
+  }
+  get geared() { return !!(this.gear && this.gear.visible); }
   // 頭上的名牌與對話泡泡（選角預覽的角色不需要，所以用到時才建立）
   setName(name) { (this.labels ||= new Labels(this.root, this.color)).setName(name); }
   say(text) { (this.labels ||= new Labels(this.root, this.color)).say(text); }

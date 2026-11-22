@@ -17,6 +17,7 @@ export const POINTS = [
   { key: 'inner', name: '內城廣場', x: -146, y: 0.17, z: 15, area: 'wall' },
   { key: 'theater', name: '觀影館', x: -170.5, y: 0.15, z: 15, area: 'wall' },
   { key: 'tfront', name: '雙螢幕前', x: -191, y: 0.15, z: 15, area: 'wall' },
+  { key: 'armory', name: '裝備庫', x: -76.6, y: 0.15, z: 6.1, area: 'wall' },
 ];
 for (const p of POINTS) p.area ||= 'hall';
 export const areaOf = (x) => (x < -69 ? 'wall' : 'hall');

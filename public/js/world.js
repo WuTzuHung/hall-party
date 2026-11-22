@@ -198,7 +198,7 @@ export function buildWorld(scene, renderer, q) {
   anim.push(stepLights);
   stepLights(0);
   return {
-    walls, floors, seats, camBlock, anim, rings: district.rings,
+    walls, floors, seats, camBlock, anim, rings: district.rings, hooks: district.hooks,
     // on：true 開燈、false 關燈；instant：true 時不做過渡（例如剛連線時套用伺服器狀態）
     setLights(on, instant = false) { LIGHT.target = on ? 1 : 0; if (instant) LIGHT.k = LIGHT.target; return LIGHT.target === 1; },
     get lightsOn() { return LIGHT.target === 1; },

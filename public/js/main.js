@@ -7,6 +7,7 @@ import { TSCREENS, TFOCUS, THEATER, inTheater } from './district.js';
 import { tvLayout } from './tv-layout.js';
 import { initChat } from './chat.js';
 import { initAdminDock } from './admin-dock.js';
+import { initOdm } from './odm.js';
 import { initTravel } from './travel.js';
 
 const $ = (s) => document.querySelector(s);
@@ -72,6 +73,7 @@ const cam = { yaw: 0, pitch: 0.18, dist: 5.5, targetDist: 5.5, minD: 0, maxD: 14
 const keys = {};
 // 觀看模式：normal 一般 / seat 座位第一人稱 / best 正中央最佳視角 / full 螢幕放到最大
 let viewMode = 'normal'; let bestD = 17; let savedSeatCam = null;
+let gear = null; // 立體機動裝置（odm.js，於下方初始化）
 let joy = { active: false, x: 0, y: 0, id: null };
 let entered = false;
 
@@ -85,21 +87,24 @@ function groundAt(x, z, y) {
     const fy = f.y !== undefined ? f.y : f.ya + (f.yb - f.ya) * ((z - f.z0) / (f.z1 - f.z0));
     if (fy <= y + 0.55 && fy > best) best = fy;
   }
+  if (gear && gear.on) best = Math.max(best, gear.tops(x, z, y)); // 裝上立體機動裝置：屋頂、牆頂也站得上去
   return best === -Infinity ? 0 : best;
 }
 // 牆擋住玩家的條件：腳高於 y1 - st 就可以跨上去（st 預設 0.35；台階型方塊用 0.55，與地面自動跨階一致）
 const blocks = (c, y) => y + (c.st || 0.35) < c.y1 && y + 1.5 > c.y0;
 // 圓弧城牆：牆中心線半徑 R、半厚（含牆腳）t；城門那段直牆（|dz| < L、在東側）由一般碰撞方塊處理
+// 牆腳是三層往外收分的退台：腳的高度越高，碰撞半厚越接近牆身本身（貼牆站立時才會貼在牆面上）
+const ringT = (g, y) => (y < 1.4 ? g.t : y < 2.8 ? g.top + 0.9 : y < 4.2 ? g.top + 0.45 : g.top);
 const ringHit = (g, x, z, y) => {
   if (y > g.h) return null;
   const dx = x - g.x, dz = z - g.z; if (dx > 0 && Math.abs(dz) < g.L) return null;
-  const d = Math.hypot(dx, dz), pen = g.t + R - Math.abs(d - g.R);
+  const d = Math.hypot(dx, dz), pen = ringT(g, y) + R - Math.abs(d - g.R);
   return pen > 0 ? { dx, dz, d } : null;
 };
 function collideRings(p) {
   for (const g of world.rings || []) {
     const h = ringHit(g, p.x, p.z, p.y); if (!h || h.d < 1e-6) continue;
-    const r = h.d > g.R ? g.R + g.t + R : g.R - g.t - R;
+    const t = ringT(g, p.y), r = h.d > g.R ? g.R + t + R : g.R - t - R;
     p.x = g.x + h.dx / h.d * r; p.z = g.z + h.dz / h.d * r;
   }
 }
@@ -157,6 +162,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyF' && !e.repeat) { travel.togglePick(); return; }
   if (travel.picking && /^(Digit|Numpad)[1-9]$/.test(e.code)) { travel.teleport(Number(e.code.slice(-1)) - 1); return; }
   if (e.code === 'Escape' && travel.picking) { travel.setPick(false); return; }
+  if (gear.key(e)) return;
   if (e.code === 'KeyE' && !e.repeat) toggleSit();
   if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) jumpQueued = performance.now(); }
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
@@ -637,6 +643,7 @@ function connect() {
       case 'media': onMedia(m.m); break;
       case 'video': screen.setState(m.video); break;
       case 'seats': setSeatOcc(m.s); break;
+      case 'gears': case 'gearOk': case 'gearNo': gear.onMsg(m); break;
       case 'lights': applyLights(m.on); break;
       case 'sitOk': break;
       case 'sitNo':
@@ -708,6 +715,7 @@ function onWelcome(m) {
     if (me.avatar.labels && me.avatar.labels.name !== me.name) me.avatar.setName(me.name);
     if (me.seat) wsSend({ t: 'sit', seat: me.seat.i }); // 重新連線：再要一次同一張椅子（保留期間伺服器仍算你的）
   }
+  gear.welcome(m.gears);
   updateOnline(m.players.length + 1);
   checkVersion(m.version);
 }
@@ -753,18 +761,20 @@ function addRemote(id, color, p) {
   if (p.n) av.setName(p.n);
   const a = p.a || 0;
   remotes.set(id, { av, name: p.n || '', color, tx: p.x, ty: p.y, tz: p.z, try: p.ry || 0, ry: p.ry || 0, a, sitting: a > 4.5 && a < 5.5, air: a >= 6, seen: performance.now(), needInfo: !p.n });
+  if (p.g) gear.remoteState(remotes.get(id), p.g);
 }
 function removeRemote(id) { const r = remotes.get(id); if (r) { r.av.dispose(); remotes.delete(id); } }
 // 動作欄位 a：0～4 地面速度、5 坐著、6 以上 = 在空中（a - 6 為速度）
 function onSnapshot(m) {
   updateOnline(m.n);
   const now = performance.now(), unknown = [];
-  for (const [id, x, y, z, ry, a] of m.p) {
+  for (const [id, x, y, z, ry, a, g] of m.p) {
     if (id === me.id) continue;
     let r = remotes.get(id);
     if (!r) { addRemote(id, 'pink', { x, y, z, ry, a }); r = remotes.get(id); unknown.push(id); }
     // 位置一次跳很遠（傳送、回城）：直接移過去，不要從半空中滑過整個大廳
-    if (Math.hypot(x - r.av.root.position.x, z - r.av.root.position.z) > 6) { r.av.root.position.set(x, y + (a > 4.5 && a < 5.5 ? 0.55 : 0), z); r.ry = ry; }
+    gear.remoteState(r, g);
+    if (Math.hypot(x - r.av.root.position.x, z - r.av.root.position.z) > (r.odm && r.odm.f & 32 ? 20 : 6)) { r.av.root.position.set(x, y + (a > 4.5 && a < 5.5 ? 0.55 : 0), z); r.ry = ry; }
     r.tx = x; r.ty = y; r.tz = z; r.try = ry; r.a = a; r.sitting = a > 4.5 && a < 5.5; r.air = a >= 6; r.seen = now; r.last = { x, y, z, ry, a };
   }
   if (unknown.length && ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'info', ids: unknown }));
@@ -803,6 +813,7 @@ const travel = initTravel({
       const g = freeSpot(x, d.y, z); if (g !== null) spot = [x, g, z];
     }
     if (!spot) spot = [d.x, d.y, d.z];
+    gear.reset();
     me.pos.set(spot[0], spot[1], spot[2]); me.vy = 0; me.onGround = true; me.jumping = false; me.airT = 0; me.camY = me.pos.y;
     me.ry = Math.PI; cam.yaw = 0; cam.pitch = Math.min(cam.pitch, 0.25); me.speed = 0;
     sendNow();
@@ -810,14 +821,21 @@ const travel = initTravel({
   },
 });
 travel.setAvatars(() => [...remotes].map(([id, r]) => [id, r.av]));
+// 立體機動裝置（城牆區裝備庫借用）
+gear = initOdm({
+  scene, camera, world, me, keys, isTouch, toast, send: wsSend, collide, groundAt, inTheater, THEATER, hud: $('#hud'),
+  locked, canUse: () => entered && viewMode === 'normal', yaw: () => cam.yaw, joy: () => joy,
+  onAction: () => { if (travel.channeling) travel.interrupt(); },
+  flush: () => { lastSend = 0; lastSent = ''; netSend(performance.now()); },
+});
 travel.setViewYaw(() => cam.yaw);
 function sendNow() { lastSend = 0; }
 function netSend(now) {
   if (!ws || ws.readyState !== 1 || !entered) return;
-  if (now - lastSend < 100) return;
+  if (now - lastSend < (gear.flying ? 66 : 100)) return;
   const sp = Math.min(3.9, +me.speed.toFixed(2));
   const a = me.seat ? 5 : (me.jumping || me.airT > 0.2) ? +(6 + Math.min(sp, 3)).toFixed(2) : sp;
-  const msg = JSON.stringify({ t: 'p', x: +me.pos.x.toFixed(2), y: +me.pos.y.toFixed(2), z: +me.pos.z.toFixed(2), ry: +me.ry.toFixed(2), a });
+  const msg = JSON.stringify({ t: 'p', x: +me.pos.x.toFixed(2), y: +me.pos.y.toFixed(2), z: +me.pos.z.toFixed(2), ry: +me.ry.toFixed(2), a, g: gear.encode() });
   if (msg === lastSent && now - lastSend < 2000) return;
   ws.send(msg); lastSent = msg; lastSend = now;
 }
@@ -833,6 +851,7 @@ function updateMe(dt) {
   if (keys.KeyA || keys.ArrowLeft) ix -= 1; if (keys.KeyD || keys.ArrowRight) ix += 1;
   if (joy.active) { ix += joy.x; iz += joy.y; }
   if (viewMode === 'flat') { me.speed = 0; return; } // 平面觀看模式：角色留在原地
+  if (gear.stepMe(dt)) { if (travel.channeling) travel.interrupt(); return; } // 立體機動裝置飛行／貼牆中
   const il = Math.hypot(ix, iz);
   if (travel.channeling && (il > 0.05 || me.jumping || performance.now() - jumpQueued < 160)) travel.interrupt(); // 移動、跳躍會打斷回城／傳送
   if (me.seat) { if (il > 0.3 && (viewMode === 'seat' || viewMode === 'normal')) standUp(); else { me.speed = 0; jumpQueued = -1e9; return; } }
@@ -855,7 +874,7 @@ function updateMe(dt) {
     sp = speed / 3.2 / airBoost;
   }
   me.speed += (sp - me.speed) * Math.min(1, dt * 10);
-  collide(me.pos);
+  collide(me.pos); gear.afterWalk(me.pos);
   const g = groundAt(me.pos.x, me.pos.z, me.pos.y);
   // 地面：往上的台階（≤0.55m）直接踩上去，腳不會陷進台階；往下 0.46m 以內（樓梯、觀賽席、舞台）快速貼回地面；更高的落差才自由落下
   if (me.vy > 0 || me.pos.y > g + (me.onGround ? 0.46 : 0.001)) {
@@ -894,7 +913,8 @@ function updateCamera(dt) {
   const fp = cam.dist < 0.35;
   const eye = me.seat ? 1.25 : 1.32;
   // 相機高度平滑跟隨（上下樓梯、跳躍時不會一格一格抖動）
-  if (Math.abs(me.pos.y - me.camY) > 2.5) me.camY = me.pos.y;
+  if (Math.abs(me.pos.y - me.camY) > 2.5 || gear.flying) me.camY = me.pos.y;
+  if (viewMode === 'normal') targetFov = 60 + Math.min(14, Math.max(0, gear.speed - 8) * 0.45); // 高速飛行時視野變寬
   me.camY += (me.pos.y - me.camY) * Math.min(1, dt * (me.jumping ? 9 : 14));
   camTarget.set(me.pos.x, me.camY + eye + (fp ? 0.0 : 0.1), me.pos.z);
   dirV.set(Math.sin(cam.yaw) * Math.cos(cam.pitch), Math.sin(cam.pitch), Math.cos(cam.yaw) * Math.cos(cam.pitch));
@@ -903,9 +923,11 @@ function updateCamera(dt) {
     for (const c of world.camBlock) { const t = rayBox(camTarget, dirV, d, c); if (t < d) d = Math.max(0.3, t - 0.25); }
     if (zoneWall) for (let s = 0.5; s < d; s += 0.5) { // 圓弧城牆擋相機
       const x = camTarget.x + dirV.x * s, y = camTarget.y + dirV.y * s, z = camTarget.z + dirV.z * s;
-      if ((world.rings || []).some((g) => { const dx = x - g.x, dz = z - g.z; return y < g.h + 2.6 && !(dx > 0 && Math.abs(dz) < g.L) && Math.abs(Math.hypot(dx, dz) - g.R) < 3.2; })) { d = Math.max(0.3, s - 0.35); break; }
+      if ((world.rings || []).some((g) => { const dx = x - g.x, dz = z - g.z; return y < g.h + (me.pos.y > g.h - 1 ? 0 : 2.6) && !(dx > 0 && Math.abs(dz) < g.L) && Math.abs(Math.hypot(dx, dz) - g.R) < 3.2; })) { d = Math.max(0.3, s - 0.35); break; }
     }
   }
+  // 裝上立體機動裝置：往上看時相機靠近頭部（不要被地面頂住），才瞄得到高處的牆面
+  if (!fp && gear.on && dirV.y < -0.05) d = Math.min(d, Math.max(0.6, (camTarget.y - groundAt(me.pos.x, me.pos.z, me.pos.y) - 0.3) / -dirV.y));
   camera.position.copy(camTarget).addScaledVector(dirV, fp ? 0 : d);
   // 室內天花板與地板限制
   const inHall = camera.position.z < -6.4 && Math.abs(camera.position.x) < 14;
@@ -959,6 +981,7 @@ function frame() {
     updateMe(dt);
     me.avatar.root.position.set(me.pos.x, me.pos.y + (me.seat ? 0.55 : 0), me.pos.z);
     me.avatar.root.rotation.y = me.ry;
+    gear.poseMe();
     me.avatar.update(dt, me.speed, !!me.seat, t, me.jumping || me.airT > 0.2);
     updateCamera(dt);
     updateLabels(dt);
@@ -990,10 +1013,12 @@ function frame() {
     p.x += (r.tx - p.x) * k; p.z += (r.tz - p.z) * k;
     const ty = r.ty + (r.sitting ? 0.55 : 0); p.y += (ty - p.y) * Math.min(1, dt * (r.air ? 14 : 10));
     let d = r.try - r.ry; d = Math.atan2(Math.sin(d), Math.cos(d)); r.ry += d * k; r.av.root.rotation.y = r.ry;
+    gear.poseRemote(r, dt);
     const moved = Math.hypot(p.x - ox, p.z - oz) / Math.max(dt, 1e-3) / 3.2;
     const ra = r.air ? r.a - 6 : r.sitting ? 0 : r.a;
     r.av.update(dt, r.sitting ? 0 : Math.max(Math.min(ra, 2.2), moved * 0.5), r.sitting, t, r.air);
   }
+  if (entered) gear.frame(dt, t, remotes.values());
   if (viewMode === 'flat') tvFrame(); // 平面排版：不畫 3D 場景，只排兩台螢幕
   else { renderer.render(scene, camera); screen.render(camera); }
   for (const p of previews) {
@@ -1026,4 +1051,6 @@ const jumpBtn = $('#btn-jump');
 jumpBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); jumpQueued = performance.now(); jumpBtn.classList.add('press'); });
 for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) jumpBtn.addEventListener(ev, () => jumpBtn.classList.remove('press'));
 jumpBtn.addEventListener('contextmenu', (e) => e.preventDefault());
-window.__hall = { tvSet, get tvL() { return tvL; }, tScreens, get zoneWall() { return zoneWall; }, setMode, seatView, travel, seatOcc, checkVersion, get media() { return mediaState; }, screen, dock, me, cam, camera, scene, world, remotes, toggleSit, collide, groundAt, freeSpot, chat, jump: () => { jumpQueued = performance.now(); }, get ws() { return ws; }, get viewMode() { return viewMode; }, enterFull, exitFull };
+window.__hall = { sim: (n, dt = 1 / 60) => { // 測試用：不畫面、以固定時間步跑 n 幀的移動與裝備
+  for (let i = 0; i < n; i++) { updateMe(dt); me.avatar.root.position.set(me.pos.x, me.pos.y + (me.seat ? 0.55 : 0), me.pos.z); me.avatar.root.rotation.y = me.ry; gear.poseMe(); gear.frame(dt, clock.elapsedTime, remotes.values()); }
+}, gear, tvSet, get tvL() { return tvL; }, tScreens, get zoneWall() { return zoneWall; }, setMode, seatView, travel, seatOcc, checkVersion, get media() { return mediaState; }, screen, dock, me, cam, camera, scene, world, remotes, toggleSit, collide, groundAt, freeSpot, chat, jump: () => { jumpQueued = performance.now(); }, get ws() { return ws; }, get viewMode() { return viewMode; }, enterFull, exitFull };
