@@ -4,6 +4,8 @@
 import * as THREE from 'three';
 import * as T from './textures.js';
 import * as TW from './textures-wall.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { buildTown } from './town.js';
 
 // ---- 配置 ----
 // 三層同心圓城牆（圓心 RC）：外城牆、中城牆、內城牆，城門都開在正東（朝街道），穿過三道門才到最內圈的觀影館
@@ -62,7 +64,16 @@ export function buildWallDistrict(api, scene, anim, q) {
   shifted(scene, DX, (sc) => { theaterHall(sc); theaterInterior(sc); theaterYard(sc); });
   ground();
   for (const R of RINGS) { greatWall(scene, { ...R, ...GATE, z0: RC.z - R.L, z1: RC.z + R.L }); ringWall(scene, R); }
-  countryside(scene);
+  const town = buildTown({ W, add, HOOK_BOXES }, {
+    C: RC,
+    rows: [
+      { r: 98.5, d: 8.5, face: -1, a0: 0, a1: 1.2 }, { r: 85.5, d: 8, face: 1, a0: 0, a1: 1.15 },
+      { r: 62, d: 8, face: 1, a0: 0, a1: 1.25 }, { r: 51.8, d: 6.4, face: 1, a0: 0, a1: 1.2 },
+    ],
+    church: { r: 92, a: -0.62 },
+    blocked: (x, z) => (x > -136 && Math.abs(z - RC.z) < 31) || FARMS.some(([x0, x1, zf, dir]) => x > x0 - 3 && x < x1 + 3 && Math.abs(z - (zf - dir * 4.5)) < 9),
+  });
+  countryside(scene, town);
   plaza(scene);
   midTown(scene);
   innerYard(scene);
@@ -100,9 +111,11 @@ function makeMats(q) {
   const cob = TW.cobbles({ size: hi, n: 16 });
   const oak = TW.planks({ base: [86, 58, 38], seedN: 61 }), oakDark = TW.planks({ base: [52, 36, 26], seedN: 62, n: 4 }), roofBoards = TW.planks({ base: [96, 68, 46], seedN: 63, n: 8 });
   const slate = TW.slate({}), flag = TW.flagstones({ size: hi });
-  const plaster = TW.limePlaster({}), plasterW = TW.limePlaster({ base: [214, 196, 168], seedN: 112 });
+  const plaster = TW.limePlaster({}), plasterW = TW.limePlaster({ base: [214, 196, 168], seedN: 112 }), plasterO = TW.limePlaster({ base: [222, 198, 150], seedN: 113 });
+  // 紅色魚鱗瓦（城鎮屋頂）兩種色調、尖塔用的深灰石板瓦
+  const tileR = TW.slate({ base: [172, 86, 58], seedN: 73 }), tileR2 = TW.slate({ base: [146, 70, 50], seedN: 74 }), spire = TW.slate({ base: [70, 74, 80], seedN: 75, cols: 10, rows: 14 });
   const earth = T.limestone({ blockW: 0, tileMeters: 8, seedN: 45, base: [70, 62, 52] });
-  for (const t of [wallStone, hallStone, hallStoneIn, trim, cob, oak, oakDark, roofBoards, slate, flag, plaster, plasterW, earth]) t.anisotropy = aniso;
+  for (const t of [wallStone, hallStone, hallStoneIn, trim, cob, oak, oakDark, roofBoards, slate, flag, plaster, plasterW, plasterO, tileR, tileR2, spire, earth]) t.anisotropy = aniso;
   const ban = TW.banner({ seedN: 91 }), banR = TW.banner({ field: '#5b1f22', seedN: 92 });
   const crestC = document.createElement('canvas'); crestC.width = crestC.height = 512;
   TW.drawCrest(crestC.getContext('2d'), 256, 236, 180, '#d9c08a', 'rgba(0,0,0,0)');
@@ -126,6 +139,12 @@ function makeMats(q) {
     flagstone: { mat: std({ map: flag, roughness: 0.6, envMapIntensity: 0.6 }), tile: 4 },
     limeP: { mat: std({ map: plaster, roughness: 0.95 }), tile: 4 },
     limeW: { mat: std({ map: plasterW, roughness: 0.95 }), tile: 4 },
+    gateWood: { mat: std({ map: oak, roughness: 0.8, emissive: 0xffffff, emissiveMap: oak, emissiveIntensity: 0.14 }) },
+    gateIron: { mat: std({ color: 0x55504a, roughness: 0.5, metalness: 0.7, emissive: 0x1a1816 }) },
+    limeO: { mat: std({ map: plasterO, roughness: 0.95 }), tile: 4 },
+    tileR: { mat: std({ map: tileR, roughness: 0.75 }), tile: 2.6 },
+    tileR2: { mat: std({ map: tileR2, roughness: 0.75 }), tile: 2.6 },
+    spire: { mat: std({ map: spire, roughness: 0.55, metalness: 0.15 }), tile: 2.2 },
     iron: { mat: std({ color: 0x2a2826, roughness: 0.55, metalness: 0.85 }) },
     ironRust: { mat: std({ color: 0x4a3426, roughness: 0.8, metalness: 0.5 }) },
     brass: { mat: std({ color: 0xa8843e, roughness: 0.4, metalness: 0.9 }) },
@@ -448,19 +467,24 @@ function armory(scene) {
 }
 
 // 外城與中城的田野：麥田、草垛、樹、木柵欄、農舍（三圈之間空著的地方）
-function countryside(scene) {
+// 城外圍的農舍（外城的北、南、西）：[x0, x1, 正面 z, 朝向, 高, 編號]
+const FARMS = [[-182, -174.5, -68, 1, 9.5, 12], [-201, -193, -64, 1, 10.5, 13], [-182, -174.5, 98, -1, 10, 14], [-158, -150.5, 92, -1, 9, 15], [-266, -258.5, 22, 1, 9.8, 16]];
+function countryside(scene, town = []) {
   const C = RC, rng = mulberry(7);
   const inBand = (x, z, r0, r1) => { const d = Math.hypot(x - C.x, z - C.z); return d > r0 && d < r1; };
   const clearOfRoads = (x, z) => !(x > C.x && Math.abs(z - C.z) < 30); // 東邊的主街區不放
   // 田地：外城一圈（半徑 79–102），中城一圈（45–68）
-  const HOUSES = [[-182, -174.5, -68, 1, 9.5, 12], [-201, -193, -64, 1, 10.5, 13], [-182, -174.5, 98, -1, 10, 14], [-158, -150.5, 92, -1, 9, 15], [-266, -258.5, 22, 1, 9.8, 16]];
+  const HOUSES = FARMS;
+  // 城門內側的城鎮區（東側 ±1.3 弧度）不放田地
+  const inTown = (x, z) => Math.abs(Math.atan2(z - C.z, x - C.x)) < 1.3;
+  const nearHouse = (x, z, m) => town.some((p) => Math.hypot(p.x - x, p.z - z) < (p.rad || 6) + m);
   const fields = HOUSES.map(([x0, x1, zf, dir]) => ({ x: (x0 + x1) / 2, z: zf - dir * 4.5, w: x1 - x0 + 3, d: 12, house: true }));
   for (const [r0, r1, n] of [[80, 101, 22], [46, 67, 12]]) {
     for (let k = 0; k < n; k++) {
       const a = 0.45 + (k + rng() * 0.4) / n * (2 * Math.PI - 0.9), r = r0 + 3 + rng() * (r1 - r0 - 12);
       const x = C.x + Math.cos(a) * r, z = C.z + Math.sin(a) * r;
       const w = 7 + rng() * 6, d = 5 + rng() * 5;
-      if (!clearOfRoads(x, z) || !inBand(x - w / 2, z - d / 2, r0, r1) || !inBand(x + w / 2, z + d / 2, r0, r1) || !inBand(x - w / 2, z + d / 2, r0, r1) || !inBand(x + w / 2, z - d / 2, r0, r1)) continue;
+      if (inTown(x, z) || !clearOfRoads(x, z) || !inBand(x - w / 2, z - d / 2, r0, r1) || !inBand(x + w / 2, z + d / 2, r0, r1) || !inBand(x - w / 2, z + d / 2, r0, r1) || !inBand(x + w / 2, z - d / 2, r0, r1)) continue;
       if (fields.some((f) => Math.abs(f.x - x) < (f.w + w) / 2 + 1.5 && Math.abs(f.z - z) < (f.d + d) / 2 + 1.5)) continue;
       fields.push({ x, z, w, d });
       const key = rng() < 0.55 ? 'field' : 'fieldG';
@@ -489,7 +513,7 @@ function countryside(scene) {
     for (let k = 0; k < n; k++) {
       const a = 0.5 + rng() * (2 * Math.PI - 1), r = r0 + 1.5 + rng() * (r1 - r0 - 3);
       const x = C.x + Math.cos(a) * r, z = C.z + Math.sin(a) * r;
-      if (!clearOfRoads(x, z)) continue;
+      if (!clearOfRoads(x, z) || nearHouse(x, z, 2)) continue;
       if (fields.some((f) => Math.abs(f.x - x) < f.w / 2 + 2 && Math.abs(f.z - z) < f.d / 2 + 2)) continue;
       if (Math.abs(x - (C.x)) < 22 && Math.abs(z - C.z) < 18) continue; // 觀影館周圍
       tree(x, z, 0.8 + rng() * 0.6, rng);
@@ -587,27 +611,8 @@ function greatWall(scene, G) {
   // 城門通道：卵石地面、通道兩側的石牆面就是牆身
   box(G.x0, 0, G.gate0, G.x1, 0.15, G.gate1, 'cobble');
   W.floors.push({ x0: G.x0 - 0.5, x1: G.x1 + 0.6, z0: G.gate0, z1: G.gate1, y: 0.15 });
-  // 吊起的鐵柵門（只露出下緣的尖齒）
-  {
-    const xg = (G.x0 + G.x1) / 2 + 1.2;
-    for (let z = G.gate0 + 0.35; z < G.gate1; z += 0.62) {
-      const ah = G.spring + Math.sqrt(Math.max(0, r * r - (z - gz) ** 2));
-      const y0 = Math.min(ah - 0.25, G.spring + 1.6);
-      box(xg - 0.07, y0, z - 0.07, xg + 0.07, ah + 0.5, z + 0.07, 'iron');
-      const tip = new THREE.ConeGeometry(0.09, 0.42, 4); P(tip, { x: xg, y: y0 - 0.2, z, rx: Math.PI }); add(tip, 'iron');
-    }
-    for (const y of [G.spring + 1.0, G.spring + 2.2, G.spring + 3.4]) {
-      const half = Math.sqrt(Math.max(0, r * r - (y + 0.2 - G.spring) ** 2));
-      if (half > 0.3) box(xg - 0.05, y, gz - half, xg + 0.05, y + 0.12, gz + half, 'iron');
-    }
-  }
-  // 敞開的兩扇大木門（貼著通道內側的牆）
-  for (const [zs, s] of [[G.gate0, 1], [G.gate1, -1]]) {
-    const z0 = zs + (s > 0 ? 0.02 : -0.3), z1 = zs + (s > 0 ? 0.3 : -0.02), xa = G.x0 + 0.4, xb = G.x0 + 0.4 + r;
-    box(xa, 0.15, Math.min(z0, z1), xb, G.spring, Math.max(z0, z1), 'oakDark');
-    for (const y of [1.2, 3.6, 6.0, 8.0]) box(xa - 0.02, y, Math.min(z0, z1) - 0.03, xb + 0.02, y + 0.18, Math.max(z0, z1) + 0.03, 'iron');
-    for (let k = 0; k < 6; k++) { const x = xa + 0.3 + k * (r - 0.6) / 5; for (const y of [1.29, 3.69, 6.09, 8.09]) { const n = new THREE.SphereGeometry(0.045, 6, 4); P(n, { x, y, z: s > 0 ? Math.max(z0, z1) + 0.04 : Math.min(z0, z1) - 0.04 }); add(n, 'iron'); } }
-  }
+  // 往上吊起的大城門（平時關著；有人走近時敲鐘、用鐵鍊整扇吊進牆裡）
+  liftGate(scene, G);
   // 城門上方的石刻紋章（兩面）
   for (const [fx, ry] of [[G.x1 + 0.03, Math.PI / 2], [G.x0 - 0.03, -Math.PI / 2]]) {
     const m = new THREE.PlaneGeometry(5.2, 5.2); P(m, { x: fx, y: G.spring + r + 4.8, z: gz, ry }); add(m, 'crestStone');
@@ -620,6 +625,166 @@ function greatWall(scene, G) {
   LIGHTS.push({ x: G.x0 - 2.5, y: 4.6, z: gz, d: 18, off: [0xff9a48, 34], on: [0xff9a48, 34], flick: 1 });
   // 城牆上懸掛的長旗（街道側，門樓兩側）
   for (const z of [Math.max(G.z0 + 2.2, G.gate0 - 14), Math.min(G.z1 - 2.2, G.gate1 + 14)]) hangBanner(scene, G.x1 + 0.2, top - 6, z, 3.2, Math.min(11, top * 0.3), Math.PI / 2, 'bannerG', 0.12);
+}
+
+// ---------- 吊門式城門 ----------
+// 一整扇包鐵的厚木門，嵌在通道兩側的石槽裡；牆頂有絞盤（大輪＋鐵鍊）把門吊進門洞上方的牆體，旁邊掛一口警鐘
+// 開關由每個人的瀏覽器依「誰在城門附近」自己判斷（大家看到的玩家位置相同，結果一致），不需要伺服器狀態
+const GATES = [];
+const GATE_NEAR = { x: 17, z: 11 }, GATE_HOLD = 6, GATE_UP = 2.3, GATE_DOWN = 1.5;
+function liftGate(scene, G) {
+  const r = (G.gate1 - G.gate0) / 2, gz = (G.gate0 + G.gate1) / 2, xg = (G.x0 + G.x1) / 2, T = 0.8, top = G.h;
+  const H = G.spring + r; // 門洞頂
+  const mats = W.mats;
+  // 石槽：通道兩側牆面上的深色凹槽＋鐵導軌
+  for (const [z, s] of [[G.gate0, 1], [G.gate1, -1]]) {
+    const za = Math.min(z, z + s * 0.04), zb = Math.max(z, z + s * 0.04);
+    box(xg - T / 2 - 0.08, 0.15, za, xg + T / 2 + 0.08, G.spring + 0.6, zb, 'soot');
+    for (const dx of [-T / 2 - 0.22, T / 2 + 0.08]) box(xg + dx, 0.15, Math.min(z, z + s * 0.14), xg + dx + 0.14, G.spring + 0.6, Math.max(z, z + s * 0.14), 'iron');
+  }
+  // 門扇（局部座標：門寬沿 z、厚度沿 x，底在 y = 0.15）
+  const hw = r + 0.35;
+  const sh = new THREE.Shape(); sh.moveTo(-hw, 0); sh.lineTo(hw, 0); sh.lineTo(hw, G.spring); sh.absarc(0, G.spring, hw, 0, Math.PI, false); sh.lineTo(-hw, 0);
+  const wood = new THREE.ExtrudeGeometry(sh, { depth: T, bevelEnabled: false, curveSegments: 24 });
+  const uv = wood.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / 2, uv.getY(i) / 2);
+  // 繞 y 轉 90°：形狀的 x → 世界 -z（對稱所以不影響）、擠出方向 z → 世界 x
+  const toWorld = new THREE.Matrix4().set(0, 0, 1, xg - T / 2, 0, 1, 0, 0.15, -1, 0, 0, gz, 0, 0, 0, 1);
+  wood.applyMatrix4(toWorld);
+  const iron = [];
+  const ib = (x0, y0, z0, x1, y1, z1) => { const g = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0); g.translate((x0 + x1) / 2, (y0 + y1) / 2 + 0.15, (z0 + z1) / 2); iron.push(g); };
+  for (const fx of [xg - T / 2 - 0.05, xg + T / 2 + 0.05]) {
+    const xa = Math.min(fx, fx + (fx < xg ? 0.06 : -0.06)) - 0.03, xb = xa + 0.09;
+    // 橫向鐵箍（拱圈部分依寬度縮短）
+    for (let y = 0.9; y < H - 0.4; y += 1.55) {
+      const half = y < G.spring ? hw : Math.sqrt(Math.max(0, hw * hw - (y - G.spring) ** 2)) - 0.1;
+      if (half > 0.4) ib(xa, y, gz - half, xb, y + 0.26, gz + half);
+    }
+    // 直向鐵條
+    for (const dz of [-hw * 0.62, 0, hw * 0.62]) { const yTop = G.spring + Math.sqrt(Math.max(0, hw * hw - dz * dz)) - 0.25; ib(xa, 0, gz + dz - 0.14, xb, yTop, gz + dz + 0.14); }
+    // 鉚釘
+    for (let y = 0.5; y < H - 0.6; y += 0.78) for (let dz = -hw + 0.55; dz < hw - 0.4; dz += 0.9) {
+      if (y > G.spring && Math.abs(dz) > Math.sqrt(Math.max(0, hw * hw - (y - G.spring) ** 2)) - 0.5) continue;
+      const n = new THREE.SphereGeometry(0.06, 6, 4); n.translate(fx + (fx < xg ? -0.07 : 0.07), y + 0.15, gz + dz); iron.push(n);
+    }
+  }
+  ib(xg - T / 2 - 0.08, -0.05, gz - hw, xg + T / 2 + 0.08, 0.35, gz + hw); // 下緣包鐵
+  // 下緣的尖齒（門落下時插進地面的鐵齒）
+  for (let dz = -hw + 0.5; dz < hw - 0.3; dz += 0.75) { const tp = new THREE.ConeGeometry(0.1, 0.4, 4); tp.rotateX(Math.PI); tp.translate(xg, 0.0, gz + dz); iron.push(tp); }
+  const door = new THREE.Group();
+  door.add(new THREE.Mesh(wood, mats.gateWood.mat), new THREE.Mesh(mergeGeometries(iron.map((g) => g.index ? g.toNonIndexed() : g).map(stripAttrs)), mats.gateIron.mat));
+  scene.add(door);
+  // 碰撞：門扇（y0 隨門升起）
+  const col = { x0: xg - T / 2 - 0.1, x1: xg + T / 2 + 0.1, z0: G.gate0, z1: G.gate1, y0: 0, y1: H + 0.3 };
+  W.walls.push(col);
+  // 牆頂的絞盤：兩座木架、橫跨城門的捲筒、兩端大輪，鐵鍊從捲筒垂進牆頂的鍊槽
+  const yW = top + 1.7;
+  box(xg - 0.5, top, G.gate0 + 0.8, xg + 0.5, top + 0.1, G.gate1 - 0.8, 'soot');
+  for (const z of [G.gate0 - 0.4, G.gate1 + 0.4]) {
+    beamXY(z, xg - 1.5, top, xg, yW + 0.35, 0.28, 0.3, 'oakDark'); beamXY(z, xg + 1.5, top, xg, yW + 0.35, 0.28, 0.3, 'oakDark');
+    box(xg - 1.6, top, z - 0.2, xg + 1.6, top + 0.25, z + 0.2, 'oakDark');
+  }
+  W.walls.push({ x0: xg - 1.6, x1: xg + 1.6, z0: G.gate0 - 0.7, z1: G.gate0 - 0.1, y0: top, y1: top + 3 });
+  W.walls.push({ x0: xg - 1.6, x1: xg + 1.6, z0: G.gate1 + 0.1, z1: G.gate1 + 0.7, y0: top, y1: top + 3 });
+  W.walls.push({ x0: xg - 0.7, x1: xg + 0.7, z0: G.gate0, z1: G.gate1, y0: top, y1: top + 2.4 });
+  const winch = new THREE.Group(); winch.position.set(xg, yW, gz);
+  {
+    const parts = [];
+    const drum = new THREE.CylinderGeometry(0.55, 0.55, G.gate1 - G.gate0 + 1.2, 16); drum.rotateX(Math.PI / 2); parts.push(['oak', drum]);
+    for (const dz of [-(r + 1.15), r + 1.15]) {
+      const rim = new THREE.TorusGeometry(1.7, 0.12, 6, 28); rim.translate(0, 0, dz); parts.push(['oakDark', rim]);
+      for (let k = 0; k < 8; k++) { const sp = new THREE.BoxGeometry(0.12, 3.3, 0.14); sp.rotateZ(k * Math.PI / 8); sp.translate(0, 0, dz); parts.push(['oakDark', sp]); }
+      for (let k = 0; k < 8; k++) { const hd = new THREE.CylinderGeometry(0.06, 0.06, 0.6, 6); hd.rotateX(Math.PI / 2); const a = k * Math.PI / 4; hd.translate(Math.cos(a) * 1.7, Math.sin(a) * 1.7, dz + Math.sign(dz) * 0.3); parts.push(['oak', hd]); }
+    }
+    for (const dz of [-2.4, 2.4]) { const band = new THREE.TorusGeometry(0.58, 0.07, 6, 18); band.translate(0, 0, dz); parts.push(['iron', band]); }
+    for (const key of ['oak', 'oakDark', 'iron']) winch.add(new THREE.Mesh(mergeGeometries(parts.filter((p) => p[0] === key).map((p) => stripAttrs(p[1].index ? p[1].toNonIndexed() : p[1]))), mats[key].mat));
+  }
+  scene.add(winch);
+  for (const dz of [-2.4, 2.4]) box(xg + 0.5, top - 0.2, gz + dz - 0.06, xg + 0.58, yW, gz + dz + 0.06, 'iron'); // 垂進鍊槽的鐵鍊
+  // 警鐘：牆頂步道上的木架（門洞北側）
+  const zb = G.gate1 + 3.6, xb0 = G.x0 + 0.9, xb1 = G.x1 - 0.9;
+  for (const x of [xb0, xb1]) { box(x - 0.15, top, zb - 0.15, x + 0.15, top + 3.6, zb + 0.15, 'oakDark'); W.walls.push({ x0: x - 0.2, x1: x + 0.2, z0: zb - 0.2, z1: zb + 0.2, y0: top, y1: top + 3.6 }); }
+  box(xb0 - 0.2, top + 3.6, zb - 0.2, xb1 + 0.2, top + 3.9, zb + 0.2, 'oakDark');
+  const ru = new THREE.BoxGeometry(xb1 - xb0 + 0.6, 0.1, 1.2); for (const s of [-1, 1]) add(P(ru.clone(), { x: (xb0 + xb1) / 2, y: top + 4.15, z: zb + s * 0.45, rx: s * 0.55 }), 'tileR2');
+  const bell = new THREE.Group(); bell.position.set((xb0 + xb1) / 2, top + 3.6, zb);
+  {
+    const prof = [[0, -1.25], [0.62, -1.25], [0.66, -1.15], [0.58, -0.95], [0.46, -0.55], [0.4, -0.2], [0.36, -0.12], [0.2, -0.05], [0, -0.05]].map(([x, y]) => new THREE.Vector2(x, y));
+    const bg = new THREE.LatheGeometry(prof, 20); bg.translate(0, 0.0, 0);
+    const bm = new THREE.Mesh(bg, mats.brass.mat.clone()); bm.material.side = THREE.DoubleSide; bell.add(bm);
+    const yoke = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.18, 0.22), mats.oakDark.mat); yoke.position.y = -0.02; bell.add(yoke);
+    const cl = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 6), mats.iron.mat); cl.position.y = -1.05; bell.add(cl);
+  }
+  scene.add(bell);
+  // 街道側照亮城門的火光（借用殿堂的光源）
+  LIGHTS.push({ x: G.x1 + 6, y: 6, z: gz, d: 26, off: [0xff9a48, 46], on: [0xff9a48, 46], flick: 1 });
+  GATES.push({ G, xg, gz, H, door, col, winch, bell, lift: 0, target: 0, idle: 0, swing: 0, swingV: 0, rings: 0, ringT: 0, moving: false });
+}
+function stripAttrs(g) { for (const k of Object.keys(g.attributes)) if (!['position', 'normal'].includes(k)) g.deleteAttribute(k); return g; }
+
+// 每幀：pts＝所有玩家的位置（含自己）；ear＝聽者位置（自己）
+let AC = null; let NOISE = null;
+export function stepGates(dt, pts, ear) {
+  for (const g of GATES) {
+    let near = false;
+    for (const p of pts) if (Math.abs(p.x - g.xg) < GATE_NEAR.x && Math.abs(p.z - g.gz) < GATE_NEAR.z && p.y < g.H + 3) { near = true; break; }
+    g.idle = near ? 0 : g.idle + dt;
+    const want = near ? 1 : g.idle > GATE_HOLD ? 0 : g.target;
+    if (want !== g.target) {
+      g.target = want;
+      if (want === 1) { g.rings = 3; g.ringT = 0; }
+      if (ear) gateSound(g, ear, want === 1);
+    }
+    const full = g.H + 0.4, goal = g.target ? full : 0;
+    const prev = g.lift;
+    if (g.lift < goal) g.lift = Math.min(goal, g.lift + GATE_UP * dt * (0.35 + 0.65 * Math.min(1, g.lift / 1.2 + 0.3)));
+    else if (g.lift > goal) g.lift = Math.max(goal, g.lift - GATE_DOWN * dt);
+    if (g.lift !== prev) {
+      g.door.position.y = g.lift; g.col.y0 = g.lift + 0.15; g.col.y1 = g.lift + g.H + 0.45;
+      g.winch.rotation.z += (g.lift - prev) / 0.55 * (g.target ? 1 : 1);
+    }
+    // 警鐘：開門時敲三下（鐘擺動）
+    if (g.rings > 0) { g.ringT -= dt; if (g.ringT <= 0) { g.rings--; g.ringT = 1.15; g.swingV += 1.6; if (ear) bellSound(g, ear); } }
+    g.swingV += (-g.swing * 9 - g.swingV * 0.9) * dt; g.swing += g.swingV * dt;
+    g.bell.rotation.x = g.swing * 0.35;
+  }
+}
+// 簡單合成的聲音（不需要音檔）：鐘聲＝幾個非整數倍頻的正弦波衰減；門＝低頻隆隆聲＋鐵鍊的喀啦聲
+function audio() {
+  if (AC === false) return null;
+  try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); } catch { AC = false; return null; }
+  if (AC.state === 'suspended') AC.resume().catch(() => {});
+  return AC;
+}
+const vol = (g, ear, far) => Math.max(0, 1 - Math.hypot(ear.x - g.xg, ear.z - g.gz) / far);
+function bellSound(g, ear) {
+  const v = vol(g, ear, 140); if (v <= 0) return; const ac = audio(); if (!ac) return;
+  const t = ac.currentTime, out = ac.createGain(); out.gain.value = 0.16 * v; out.connect(ac.destination);
+  for (const [f, a, d] of [[392, 1, 3.2], [784, 0.5, 2.4], [940, 0.32, 1.8], [1175, 0.22, 1.3], [196, 0.45, 3.6], [1567, 0.12, 0.8]]) {
+    const o = ac.createOscillator(), e = ac.createGain(); o.frequency.value = f; o.type = 'sine';
+    e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(a, t + 0.008); e.gain.exponentialRampToValueAtTime(0.0008, t + d);
+    o.connect(e).connect(out); o.start(t); o.stop(t + d + 0.05);
+  }
+}
+function gateSound(g, ear, opening) {
+  const v = vol(g, ear, 90); if (v <= 0) return; const ac = audio(); if (!ac) return;
+  const dur = (g.H + 0.4) / (opening ? GATE_UP : GATE_DOWN);
+  if (!NOISE) { NOISE = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate); const d = NOISE.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+  const t = ac.currentTime;
+  const src = ac.createBufferSource(); src.buffer = NOISE; src.loop = true;
+  const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 140;
+  const e = ac.createGain(); e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(0.5 * v, t + 0.6); e.gain.setValueAtTime(0.5 * v, t + dur - 0.4); e.gain.linearRampToValueAtTime(0, t + dur + 0.3);
+  src.connect(lp).connect(e).connect(ac.destination); src.start(t); src.stop(t + dur + 0.4);
+  // 鐵鍊／棘輪的喀啦聲
+  for (let k = 0.3; k < dur; k += 0.32) {
+    const c = ac.createBufferSource(); c.buffer = NOISE; const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1800 + Math.random() * 900; bp.Q.value = 6;
+    const ce = ac.createGain(); ce.gain.setValueAtTime(0, t + k); ce.gain.linearRampToValueAtTime(0.22 * v, t + k + 0.005); ce.gain.exponentialRampToValueAtTime(0.001, t + k + 0.07);
+    c.connect(bp).connect(ce).connect(ac.destination); c.start(t + k, Math.random()); c.stop(t + k + 0.09);
+  }
+  // 落地時的重擊聲
+  if (!opening) {
+    const o = ac.createOscillator(), oe = ac.createGain(); o.frequency.setValueAtTime(70, t + dur); o.frequency.exponentialRampToValueAtTime(32, t + dur + 0.5);
+    oe.gain.setValueAtTime(0, t + dur); oe.gain.linearRampToValueAtTime(0.6 * v, t + dur + 0.02); oe.gain.exponentialRampToValueAtTime(0.001, t + dur + 0.9);
+    o.connect(oe).connect(ac.destination); o.start(t + dur); o.stop(t + dur + 1);
+  }
 }
 
 // ---------- 城內廣場與民居 ----------
@@ -641,7 +806,7 @@ function plaza(scene) {
     const ax = new THREE.CylinderGeometry(0.06, 0.06, 2.3, 8); P(ax, { x, y: 2.75, z, rz: Math.PI / 2 }); add(ax, 'oak');
     const rope = new THREE.CylinderGeometry(0.012, 0.012, 1.3, 4); P(rope, { x, y: 2.1, z }); add(rope, 'straw');
     W.cyl(0.16, 0.13, 0.26, x, 1.3, z, 'oak', 10);
-    for (const s of [-1, 1]) { const rf = new THREE.BoxGeometry(2.6, 0.08, 1.2); P(rf, { x, y: 3.65, z: z + s * 0.42, rx: s * 0.75 }); add(rf, 'slate'); }
+    for (const s of [-1, 1]) { const rf = new THREE.BoxGeometry(2.6, 0.08, 1.2); P(rf, { x, y: 3.65, z: z + s * 0.42, rx: s * 0.75 }); add(rf, 'tileR'); }
     W.walls.push({ x0: x - 1.35, x1: x + 1.35, z0: z - 1.35, z1: z + 1.35, y0: 0, y1: 1.8 });
   }
   for (const [x, z] of [[-77, 9.4], [-77, 20.6], [-93, 9.4], [-93, 20.6]]) lantern(scene, x, z);
@@ -674,7 +839,8 @@ function plaza(scene) {
 function house(scene, x0, x1, zf, dir, h, i) {
   const D = 9, zb = zf - dir * D, zA = Math.min(zf, zb), zB = Math.max(zf, zb), w = x1 - x0, cx = (x0 + x1) / 2;
   const jet = 0.4, gf = 3.3; // 二樓外挑、一樓高度
-  const plaster = i % 3 === 1 ? 'limeW' : 'limeP';
+  const plaster = i % 3 === 1 ? 'limeW' : i % 3 === 2 ? 'limeO' : 'limeP';
+  const roofK = i % 2 ? 'tileR2' : 'tileR';
   // 一樓石造
   box(x0, 0, zA, x1, gf, zB, 'hStone', true);
   // 樓上（外挑）
@@ -692,14 +858,14 @@ function house(scene, x0, x1, zf, dir, h, i) {
     const len = (w / 2 + 0.55) / Math.cos(pitch);
     for (const s of [-1, 1]) {
       const rf = new THREE.BoxGeometry(len, 0.22, zb2 - za2 + 0.9);
-      P(rf, { x: cx + s * (w / 4 - 0.55 / 2) + s * 0.05, y: h + rise / 2 - 0.15 + 0.12, z: (za2 + zb2) / 2, rz: -s * pitch }); add(rf, 'slate');
+      const xc = (w / 2 + 0.55) / 2; P(rf, { x: cx + s * xc, y: h + rise - xc * Math.tan(pitch) + 0.11 / Math.cos(pitch), z: (za2 + zb2) / 2, rz: -s * pitch }); add(rf, roofK);
     }
-    add(P(new THREE.BoxGeometry(0.3, 0.3, zb2 - za2 + 0.9), { x: cx, y: h + rise + 0.05, z: (za2 + zb2) / 2, rz: Math.PI / 4 }), 'slate');
+    add(P(new THREE.BoxGeometry(0.3, 0.3, zb2 - za2 + 0.9), { x: cx, y: h + rise + 0.05, z: (za2 + zb2) / 2, rz: Math.PI / 4 }), roofK);
     // 屋頂老虎窗
     if (w > 6.6) for (const s of [-1, 1]) {
       const dz = (za2 + zb2) / 2 + s * 1.8 * 0, dx = cx + s * w * 0.22, dy = h + rise * 0.38;
       box(dx - 0.55, dy, dz - 0.6, dx + 0.55, dy + 1.2, dz + 0.6, plaster);
-      const dr = new THREE.BoxGeometry(0.9, 0.12, 1.5); for (const t of [-1, 1]) add(P(dr.clone(), { x: dx + t * 0.35, y: dy + 1.45, z: dz, rz: -t * 0.75 }), 'slate');
+      const dr = new THREE.BoxGeometry(0.9, 0.12, 1.5); for (const t of [-1, 1]) add(P(dr.clone(), { x: dx + t * 0.35, y: dy + 1.45, z: dz, rz: -t * 0.75 }), roofK);
     }
   }
   // 木構架（正面）：face 在 zfJ 外側 0.05
