@@ -118,7 +118,8 @@ function mats(q) {
     lbCardD: { mat: std({ color: 0x8a643a, roughness: 1 }) },
     lbCurtain: { mat: std({ color: 0xb9c4ae, roughness: 1, side: THREE.DoubleSide }) },
     lbCan: { mat: std({ color: 0x6a1420, roughness: 0.3, metalness: 0.7 }) },
-    lbBanana: { mat: std({ color: 0xe2c040, roughness: 0.6 }) },
+    lbBanana: { mat: std({ color: 0xe9c64a, roughness: 0.5 }) },
+    lbBananaS: { mat: std({ color: 0x7a7a34, roughness: 0.75 }) },
     lbBananaD: { mat: std({ color: 0x5a4a20, roughness: 0.8 }) },
     lbCup: { mat: std({ color: 0xf0ece2, roughness: 0.6 }) },
     lbRed: { mat: std({ color: 0xb02222, roughness: 0.5 }) },
@@ -382,7 +383,7 @@ function crt(x, y, z, s, ry, broken = false) {
 function stool(x, z, y, seat = true) {
   cyl(0.18, 0.18, 0.06, x, y + 0.42, z, 'lbRed', 16); cyl(0.025, 0.025, 0.42, x, y, z, 'lbChrome', 6);
   cyl(0.2, 0.22, 0.03, x, y, z, 'lbChrome', 12);
-  if (seat) W.seats.push({ x, y: y + 0.5, z, ry: Math.PI / 2 });
+  if (seat) W.seats.push({ x, y: y + 0.5, z, ry: Math.PI / 2, noScreen: true }); // 店裡的圓凳看不到研究所電視
   W.walls.push({ x0: x - 0.18, x1: x + 0.18, z0: z - 0.18, z1: z + 0.18, y0: y, y1: y + 1.6, chair: true });
 }
 
@@ -582,13 +583,50 @@ function labRoom(scene) {
   box(69.2, y, -6.3, 69.55, y + 0.05, -6.0, 'lbWhite'); box(69.25, y + 0.05, -6.28, 69.6, y + 0.07, -6.05, 'lbBlue');
 }
 
-function banana(x, y, z) {
-  for (let k = 0; k < 5; k++) {
-    const a = (k - 2) * 0.16, pts = [];
-    for (let i = 0; i <= 6; i++) { const t = i / 6; pts.push([x + (t - 0.5) * 0.2 * Math.cos(a), y + 0.035 + Math.sin(t * Math.PI) * 0.035, z + (t - 0.5) * 0.2 * Math.sin(a) + (k - 2) * 0.03 + Math.sin(t * Math.PI) * 0.03]); }
-    tube(pts, 0.018, k === 4 ? 'lbBananaD' : 'lbBanana', 10, 6);
+// 香蕉：沿弧線掃出有稜角的果身（五條稜、兩端收細），果柄聚在一起成一串，尾端是褐色的果尖
+function bananaFinger(c, f, bend, L, arc, R, key) {
+  const RS = 15, N = 22, pos = [], idx = [], rad = L / arc;
+  const up = new THREE.Vector3().crossVectors(f, bend).normalize();
+  const center = (t) => c.clone().addScaledVector(f, rad * Math.sin(t * arc)).addScaledVector(bend, rad * (1 - Math.cos(t * arc)));
+  for (let i = 0; i <= N; i++) {
+    const t = i / N, p = center(t);
+    const tan = f.clone().multiplyScalar(Math.cos(t * arc)).addScaledVector(bend, Math.sin(t * arc)).normalize();
+    const nx = new THREE.Vector3().crossVectors(up, tan).normalize(), ny = new THREE.Vector3().crossVectors(tan, nx).normalize();
+    // 粗細：果柄細、中段飽滿、尾端收成鈍尖
+    const r = t < 0.14 ? R * (0.32 + 0.25 * t / 0.14) : R * (0.57 + 0.43 * Math.sin(Math.min(1, (t - 0.14) / 0.72) * Math.PI * 0.5)) * (t > 0.86 ? Math.max(0.25, 1 - (t - 0.86) / 0.14 * 0.75) : 1);
+    const ridge = t < 0.14 ? 0 : 0.09;
+    for (let j = 0; j < RS; j++) {
+      const th = j / RS * Math.PI * 2, rr = r * (1 - ridge * (1 - Math.abs(Math.cos(th * 2.5))));
+      const v = p.clone().addScaledVector(nx, Math.cos(th) * rr * 1.05).addScaledVector(ny, Math.sin(th) * rr * 0.95);
+      pos.push(v.x, v.y, v.z);
+    }
   }
-  cyl(0.012, 0.012, 0.05, x - 0.1, y + 0.03, z, 'lbBananaD', 5, { rz: 1.2 });
+  for (let i = 0; i < N; i++) for (let j = 0; j < RS; j++) { const a = i * RS + j, b = i * RS + (j + 1) % RS, c2 = a + RS, d = b + RS; idx.push(a, c2, b, b, c2, d); }
+  // 兩端封口
+  const e0 = pos.length / 3, p0 = center(0); pos.push(p0.x, p0.y, p0.z); const e1 = e0 + 1, p1 = center(1); pos.push(p1.x, p1.y, p1.z);
+  for (let j = 0; j < RS; j++) { idx.push(e0, j, (j + 1) % RS); idx.push(e1, N * RS + (j + 1) % RS, N * RS + j); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+  add(g, key);
+  // 果尖（深褐色小鈍頭）
+  const tip = center(1), tg = new THREE.SphereGeometry(R * 0.3, 8, 6); tg.translate(tip.x, tip.y, tip.z); add(tg, 'lbBananaD');
+  return center(0);
+}
+function banana(x, y, z) {
+  const crown = new THREE.Vector3(x - 0.07, y + 0.03, z - 0.06), Y = new THREE.Vector3(0, 1, 0);
+  const n = 5, R = 0.025, L = 0.21;
+  for (let k = 0; k < n; k++) {
+    const a = 0.55 + (k - (n - 1) / 2) * 0.26;
+    const f = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+    const side = new THREE.Vector3().crossVectors(Y, f).normalize().negate();
+    // 整串一起往同一側彎，尾端微微翹起；中間的幾根疊高一點
+    const bend = side.multiplyScalar(0.82).addScaledVector(Y, 0.42).normalize();
+    const lift = 0.009 * (2 - Math.abs(k - 2));
+    const c = crown.clone().add(new THREE.Vector3(0, lift, 0)).addScaledVector(f, 0.012);
+    bananaFinger(c, f.clone().addScaledVector(Y, -0.12).normalize(), bend, L * (0.94 + 0.06 * Math.cos(k * 1.7)), 0.95, R * (0.95 + 0.05 * Math.sin(k * 2.3)), 'lbBanana');
+  }
+  // 果軸：一小段粗的綠褐色梗，端面是深色切口
+  const sg = new THREE.CylinderGeometry(0.011, 0.014, 0.05, 8); sg.rotateZ(Math.PI / 2); sg.rotateY(-0.55); sg.translate(crown.x - 0.02, crown.y + 0.004, crown.z - 0.012); add(sg, 'lbBananaS');
+  const cg = new THREE.CylinderGeometry(0.0115, 0.0115, 0.004, 8); cg.rotateZ(Math.PI / 2); cg.rotateY(-0.55); cg.translate(crown.x - 0.043, crown.y + 0.004, crown.z - 0.026); add(cg, 'lbBananaD');
 }
 function metalRack(x0, x1, z0, z1, y, h, levels) {
   for (const lv of levels) box(x0, y + lv, z0, x1, y + lv + 0.025, z1, 'lbSteelL');
@@ -614,7 +652,7 @@ function officeChair(x, z, y) {
   rbox(0.08, 0.66, 0.48, x - 0.27, y + 0.88, z, 'lbBlack', 0.04, 0);
   rbox(0.04, 0.14, 0.4, x - 0.25, y + 1.0, z, 'lbRed', 0.02);
   for (const s of [-1, 1]) rbox(0.3, 0.03, 0.06, x - 0.02, y + 0.68, z + s * 0.25, 'lbBlack', 0.01);
-  W.seats.push({ x, y: y + 0.5, z, ry: Math.PI / 2 });
+  W.seats.push({ x, y: y + 0.5, z, ry: Math.PI / 2, noScreen: true }); // 電腦椅背對電視：坐下只看前方，不給最佳視角／全螢幕
   W.walls.push({ x0: x - 0.3, x1: x + 0.25, z0: z - 0.27, z1: z + 0.27, y0: y, y1: y + 1.6, chair: true });
 }
 function whiteboard(scene, x, z, y) {

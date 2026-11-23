@@ -302,8 +302,8 @@ function sitAt(s, quiet) {
   me.seat = s; me.pos.set(s.x, s.y - 0.5, s.z); me.ry = s.ry; me.speed = 0; me.vy = 0; me.jumping = false;
   seatView();
   $('#btn-sit').textContent = '站起來'; $('#btn-sit').disabled = false; sitLabel = '站起來';
-  if (!quiet) toast('已坐下 · 可用下方按鈕切換最佳視角或全螢幕');
-  $('#seat-tools').classList.remove('hidden'); setMode('seat');
+  if (!quiet) toast(s.noScreen ? '已坐下' : '已坐下 · 可用下方按鈕切換最佳視角或全螢幕');
+  $('#seat-tools').classList.toggle('hidden', !!s.noScreen); setMode('seat');
   wsSend({ t: 'sit', seat: s.i }); // 先坐下（樂觀），伺服器拒絕時再站起來
   sendNow();
 }
@@ -331,7 +331,10 @@ $('#btn-sit').addEventListener('click', (e) => { e.stopPropagation(); toggleSit(
 // 坐下時：第一人稱，從座位的眼睛高度看向大螢幕中央
 function seatView() {
   const ex = me.pos.x, ey = me.pos.y + 1.25, ez = me.pos.z;
-  updateZone(); const F = focusScreen();
+  updateZone();
+  // 背對螢幕的椅子（研究所電腦椅等）：坐下只看正前方
+  if (me.seat && me.seat.noScreen) { cam.yaw = Math.atan2(-Math.sin(me.seat.ry), -Math.cos(me.seat.ry)); cam.pitch = 0.12; cam.dist = cam.targetDist = 0; return; }
+  const F = focusScreen();
   const lx = F.x - ex, ly = F.y - ey, lz = F.z - ez; const l = Math.hypot(lx, ly, lz);
   cam.pitch = Math.asin(-ly / l); cam.yaw = Math.atan2(-lx, -lz);
   cam.dist = cam.targetDist = 0;
@@ -753,7 +756,8 @@ function restoreFrom(sn) {
   const s = Number.isInteger(sn.seat) ? world.seats[sn.seat] : null;
   if (s && !seatTaken(s)) {
     sitAt(s, true);
-    if (sn.view === 'best') setMode('best');
+    if (s.noScreen) { /* 背對螢幕的椅子沒有最佳視角／全螢幕 */ }
+    else if (sn.view === 'best') setMode('best');
     else if (sn.view === 'full') enterFull();
   } else if (s) toast('原本的位子已經有人坐了');
   if (typeof sn.view === 'string' && sn.view.startsWith('flat:')) { updateZone(); if (zoneWall) tvSet(sn.view.slice(5), true); }
