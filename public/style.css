@@ -413,6 +413,14 @@ body.touch #channel{bottom:max(206px,calc(env(safe-area-inset-bottom) + 196px))}
 #tv-bar .tv-num{font:600 15px Cinzel,serif;letter-spacing:.08em;min-width:14px;text-align:center}
 #tv-bar .tv-tool{padding:0 9px}
 #tv-bar .tv-tool.hidden{display:none}
+#tv-bar .tv-vk{display:inline-flex;align-items:center;gap:6px;padding-right:8px}
+#tv-bar .tv-vr{-webkit-appearance:none;appearance:none;width:78px;height:4px;border-radius:999px;background:linear-gradient(90deg,var(--gold) var(--v,100%),rgba(255,255,255,.2) var(--v,100%));outline:none;margin:0;cursor:pointer;touch-action:none}
+#tv-bar .tv-vr::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;border-radius:50%;background:linear-gradient(180deg,#f6dc95,#d4a748);border:0;box-shadow:0 1px 5px rgba(0,0,0,.5)}
+#tv-bar .tv-vr::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:linear-gradient(180deg,#f6dc95,#d4a748);border:0;box-shadow:0 1px 5px rgba(0,0,0,.5)}
+#tv-bar .tv-vk.off .tv-vr{opacity:.4}
+#tv-bar .tv-vn{min-width:1.9em;text-align:right;font-variant-numeric:tabular-nums;font-size:11px;color:#b9ad92}
+body.touch #tv-bar .tv-vr{height:6px} body.touch #tv-bar .tv-vr::-webkit-slider-thumb{width:20px;height:20px}
+@media (max-width:640px){ #tv-bar .tv-vr{width:56px} #tv-bar .tv-vn{display:none} }
 #tv-bar .tv-vol{display:inline-flex;gap:2px;margin-left:2px;padding-left:6px;border-left:1px solid rgba(232,220,188,.16)}
 #tv-bar .tv-vol button{font:600 13px Cinzel,serif;padding:0 8px;gap:4px}
 #tv-bar .tv-vol i{font-style:normal;font-size:13px}
