@@ -381,6 +381,9 @@ const TV_NAMES = { hall: '館內觀看 · 可坐下、最佳視角或走遠一�
 const TV_ORDER = ['hall', 'split', 'pip', 'a', 'b'];
 const tvL = { layout: 'hall', ratio: 0.5, swap: false, main: 'a', corner: 3, pipSize: 0.3 };
 const tvMute = { a: false, b: false };
+// 兩台螢幕各自的音量（0–100，只對自己；乘上右上角的總音量），存在瀏覽器裡
+const tvVol = { a: 100, b: 100 };
+try { const sv = JSON.parse(localStorage.getItem('hall-tvvol') || 'null'); if (sv) for (const k of ['a', 'b']) if (sv[k] >= 0 && sv[k] <= 100) tvVol[k] = sv[k]; } catch (_) { }
 try { const v = JSON.parse(localStorage.getItem('hall-tv') || '{}'); for (const k of ['ratio', 'swap', 'main', 'corner', 'pipSize']) if (k in v) tvL[k] = v[k]; } catch (_) { }
 const tvSave = () => { try { localStorage.setItem('hall-tv', JSON.stringify({ ratio: tvL.ratio, swap: tvL.swap, main: tvL.main, corner: tvL.corner, pipSize: tvL.pipSize })); } catch (_) { } };
 let tvSaved = null, tvPrevMode = 'normal', tvFs = false, tvIdleT = 0;
@@ -494,7 +497,11 @@ function tvUI() {
   const l = tvL.layout;
   $('#tv-swap').classList.toggle('hidden', l === 'hall');
   $('#tv-corner').classList.toggle('hidden', l !== 'pip'); $('#tv-size').classList.toggle('hidden', l !== 'pip');
-  for (const k of ['a', 'b']) { const b = $('#tv-m' + k); b.classList.toggle('off', tvMute[k]); b.querySelector('i').textContent = tvMute[k] ? '🔇' : '🔊'; }
+  for (const k of ['a', 'b']) {
+    const b = $('#tv-m' + k), off = tvMute[k] || tvVol[k] === 0; b.classList.toggle('off', off); b.querySelector('i').textContent = off ? '🔇' : '🔊';
+    b.parentElement.classList.toggle('off', tvMute[k]);
+    const r = $('#tv-v' + k); r.value = tvVol[k]; r.style.setProperty('--v', tvVol[k] + '%'); $('#tv-vn' + k).textContent = Math.round(tvVol[k]);
+  }
 }
 document.querySelectorAll('#tv-bar [data-tv]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); b.blur(); tvSet(b.dataset.tv); }));
 $('#tv-swap').addEventListener('click', (e) => { e.stopPropagation(); e.currentTarget.blur(); tvSwap(); });
@@ -505,6 +512,16 @@ for (const k of ['a', 'b']) $('#tv-m' + k).addEventListener('click', (e) => {
   if (!soundOn) toast('先按右上角開啟聲音');
   else toast(`${k === 'a' ? 'I' : 'II'} ${tvMute[k] ? '已靜音（只對你自己）' : '恢復聲音'}`);
 });
+for (const k of ['a', 'b']) {
+  const r = $('#tv-v' + k);
+  for (const ev of ['pointerdown', 'mousedown', 'click', 'keydown']) r.addEventListener(ev, (e) => e.stopPropagation());
+  r.addEventListener('input', () => {
+    tvVol[k] = Number(r.value); if (tvVol[k] > 0) tvMute[k] = false;
+    try { localStorage.setItem('hall-tvvol', JSON.stringify(tvVol)); } catch (_) { }
+    updateVolume(); tvUI();
+  });
+  r.addEventListener('change', () => { r.blur(); if (!soundOn) toast('先按右上角開啟聲音'); });
+}
 // 鍵盤：V 切換觀看方式、X 交換、C 子畫面換角落、Esc 回到館內
 function tvKey(e) {
   if (!tvHere() || e.repeat) return false;
@@ -973,6 +990,14 @@ function updateCamera(dt) {
   }
   // 裝上立體機動裝置：往上看時相機靠近頭部（不要被地面頂住），才瞄得到高處的牆面
   if (!fp && gear.on && dirV.y < -0.05) d = Math.min(d, Math.max(0.6, (camTarget.y - groundAt(me.pos.x, me.pos.z, me.pos.y) - 0.3) / -dirV.y));
+  // 觀影館內：相機沿著視線往角色拉近，不直接把座標夾進牆內（否則走進大門時相機會跳到頭頂、視角亂轉）
+  // 站在大門附近、相機在門外（視線穿過門洞）時，不限制相機，讓它像平常一樣跟在後面
+  const T0 = THEATER, atDoor = inTheater(me.pos.x, me.pos.z) && camTarget.x > T0.x1 - T0.t - 3 && dirV.x > 0 && Math.abs(camTarget.z - (T0.z0 + T0.z1) / 2) < 1.9;
+  if (!fp && !atDoor && inTheater(me.pos.x, me.pos.z)) {
+    const T_ = THEATER, I0 = T_.x0 + T_.t + 0.3, I1 = T_.x1 - T_.t - 0.3, Z0 = T_.z0 + T_.t + 0.3, Z1 = T_.z1 - T_.t - 0.3;
+    const lim = (o, v, lo, hi) => (v > 1e-6 ? (hi - o) / v : v < -1e-6 ? (lo - o) / v : Infinity);
+    d = Math.max(0.3, Math.min(d, lim(camTarget.x, dirV.x, I0, I1), lim(camTarget.z, dirV.z, Z0, Z1)));
+  }
   camera.position.copy(camTarget).addScaledVector(dirV, fp ? 0 : d);
   // 室內天花板與地板限制
   const inHall = camera.position.z < -6.4 && Math.abs(camera.position.x) < 14;
@@ -990,7 +1015,7 @@ function updateCamera(dt) {
     else if (onLabStairs(p.x, p.z)) { C.x = cl(C.x, 64.25, 65.8); if (C.z < 0) C.z = Math.max(C.z, -8.65); }
   }
   // 觀影館內：相機不穿出牆面與屋頂
-  if (inTheater(me.pos.x, me.pos.z)) {
+  if (inTheater(me.pos.x, me.pos.z) && !atDoor) {
     const T_ = THEATER, I0 = T_.x0 + T_.t + 0.3, I1 = T_.x1 - T_.t - 0.3, Z0 = T_.z0 + T_.t + 0.3, Z1 = T_.z1 - T_.t - 0.3;
     camera.position.x = THREE.MathUtils.clamp(camera.position.x, I0, I1); camera.position.z = THREE.MathUtils.clamp(camera.position.z, Z0, Z1);
     const half = (T_.z1 - T_.z0) / 2, rY = T_.ridge - (T_.ridge - T_.eave) * Math.abs(camera.position.z - (T_.z0 + half)) / half;
@@ -1023,7 +1048,7 @@ function updateVolume() {
   if (zoneWall) {
     // 觀影館內兩台都是全音量；在廣場上隨距離變小
     const tv = inTheater(x, z) ? 100 : Math.max(0, 40 - Math.hypot(x - THEATER.x1, z - 15) * 1.2);
-    tScreens.forEach((t, i) => t.setVolume(tvMute[i ? 'b' : 'a'] ? 0 : tv * userVol / 100));
+    tScreens.forEach((t, i) => { const k = i ? 'b' : 'a'; t.setVolume(tvMute[k] ? 0 : tv * userVol / 100 * tvVol[k] / 100); });
     return;
   }
   let v;

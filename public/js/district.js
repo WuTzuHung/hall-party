@@ -313,9 +313,9 @@ function ringWall(scene, Rg) {
     seg(a, R - t, R + t, 0, h, 'gwStone');
     // 往外收分的牆腳（三層退台）＋石帶
     for (let k = 0; k < 3; k++) {
-      const dd = (3 - k) * 0.45, y1 = 1.4 + k * 1.4;
-      seg(a, R + t, R + t + dd, 0, y1, 'gwStone'); seg(a, R - t - dd, R - t, 0, y1, 'gwStone');
-      seg(a, R + t + dd - 0.02, R + t + dd + 0.1, y1 - 0.25, y1, 'trim'); seg(a, R - t - dd - 0.1, R - t - dd + 0.02, y1 - 0.25, y1, 'trim');
+      const dd = (3 - k) * 0.45, y1 = 1.4 + k * 1.4, y0 = y1 - 1.4;
+      seg(a, R + t, R + t + dd, y0, y1, 'gwStone'); seg(a, R - t - dd, R - t, y0, y1, 'gwStone');
+      seg(a, R + t + dd - 0.02, R + t + dd + 0.1, y1 - 0.25, y1 + 0.03, 'trim'); seg(a, R - t - dd - 0.1, R - t - dd + 0.02, y1 - 0.25, y1 + 0.03, 'trim');
     }
     for (const y of [14, 27]) if (y < h - 3) { seg(a, R + t, R + t + 0.35, y, y + 0.55, 'trim'); seg(a, R - t - 0.35, R - t, y, y + 0.55, 'trim'); }
     // 頂端：女兒牆與雉堞（兩側）
@@ -329,9 +329,9 @@ function ringWall(scene, Rg) {
     seg(a, R - t + 0.5, R + t - 0.5, h, h + 0.08, 'oakDark');
     // 外側扶壁（三層收分）
     if (i % 3 === 1) for (let k = 0; k < 3; k++) {
-      const y1 = Math.min(h - 6, 12 + k * 9), dd = 2.2 - k * 0.6;
-      if (y1 <= 0) continue;
-      seg(a, R + t, R + t + dd, 0, y1, 'gwStone', 2.6);
+      const y1 = Math.min(h - 6, 12 + k * 9), dd = 2.2 - k * 0.6, y0 = k === 0 ? 0 : Math.min(h - 6, 12 + (k - 1) * 9);
+      if (y1 <= y0) continue;
+      seg(a, R + t, R + t + dd, y0, y1, 'gwStone', 2.6);
       seg(a, R + t, R + t + dd + 0.05, y1, y1 + 0.35, 'trim', 2.7);
     }
     // 內側牆面的火把（只有火光精靈，不加真的光源）
@@ -555,9 +555,14 @@ function greatWall(scene, G) {
     for (let k = 0; k < 3; k++) {
       const d = (3 - k) * 0.45, y1 = 1.4 + k * 1.4;
       const xa = sgn > 0 ? face : face - d, xb = sgn > 0 ? face + d : face;
-      box(xa, 0, G.z0, xb, y1, G.gate0 - (k === 0 ? 0 : 0), 'gwStone', k === 0 ? 'nocam' : false);
-      box(xa, 0, G.gate1, xb, y1, G.z1, 'gwStone', k === 0 ? 'nocam' : false);
-      box(xa, y1 - 0.25, G.z0, xb + (sgn > 0 ? 0.12 : 0), y1, G.gate0, 'trim'); box(xa - (sgn < 0 ? 0.12 : 0), y1 - 0.25, G.gate1, xb, y1, G.z1, 'trim');
+      // 每一階從下一階的頂面開始疊（不重疊，避免側面共面閃爍）；石帶往外多凸 0.12、兩端各多伸 0.04
+      const y0 = k === 0 ? 0 : 1.4 + (k - 1) * 1.4;
+      // 街道側（sgn>0）城門兩邊是門樓，牆腳收進門樓裡一點（端面不與門樓側面共面）
+      const e = sgn > 0 ? -0.05 : 0, et = sgn > 0 ? -0.05 : 0.04;
+      box(xa, y0, G.z0, xb, y1, G.gate0 + e, 'gwStone', k === 0 ? 'nocam' : false);
+      box(xa, y0, G.gate1 - e, xb, y1, G.z1, 'gwStone', k === 0 ? 'nocam' : false);
+      const ta = xa - (sgn < 0 ? 0.12 : 0), tb = xb + (sgn > 0 ? 0.12 : 0);
+      box(ta, y1 - 0.25, G.z0 - 0.04, tb, y1 + 0.03, G.gate0 + et, 'trim'); box(ta, y1 - 0.25, G.gate1 - et, tb, y1 + 0.03, G.z1 + 0.04, 'trim');
     }
     for (const y of [14, 27]) {
       const xa = sgn > 0 ? face : face - 0.35, xb = sgn > 0 ? face + 0.35 : face;
@@ -572,8 +577,8 @@ function greatWall(scene, G) {
       if (z > G.gate0 - 9 && z < G.gate1 + 9) continue;
       const w = 2.6, d = 2.2;
       for (let k = 0; k < 3; k++) {
-        const y1 = 12 + k * 9, dd = d - k * 0.6;
-        box(sgn > 0 ? face : face - dd, 0, z - w / 2, sgn > 0 ? face + dd : face, y1, z + w / 2, 'gwStone', 'nocam');
+        const y1 = 12 + k * 9, dd = d - k * 0.6, y0 = k === 0 ? 0 : y1 - 9;
+        box(sgn > 0 ? face : face - dd, y0, z - w / 2, sgn > 0 ? face + dd : face, y1, z + w / 2, 'gwStone', 'nocam');
         // 斜面收頭
         const cap = new THREE.BoxGeometry(dd * 1.05, 0.5, w + 0.1); P(cap, { x: face + sgn * dd / 2, y: y1, z, rz: sgn * 0.6 }); add(cap, 'trim');
       }
@@ -606,7 +611,7 @@ function greatWall(scene, G) {
       add(P(new THREE.BoxGeometry(0.04, 1.12, 0.38), { x: fx + dir * 0.17, y: G.spring + s * (r + 0.55), z: gz + c * (r + 0.55), rx: -(a - Math.PI / 2) }), 'soot');
     }
     // 門柱基座
-    for (const z of [G.gate0, G.gate1]) box(fx === G.x0 ? G.x0 - 0.5 : G.x1, 0, z - (z === G.gate0 ? 1.2 : 0), fx === G.x0 ? G.x0 : G.x1 + 0.5, G.spring, z + (z === G.gate1 ? 1.2 : 0), 'trim');
+    for (const z of [G.gate0, G.gate1]) box(fx === G.x0 ? G.x0 - 0.5 : G.x1, 0, z - (z === G.gate0 ? 1.2 : 0.03), fx === G.x0 ? G.x0 : G.x1 + 0.5, G.spring, z + (z === G.gate1 ? 1.2 : 0.03), 'trim'); // 門柱略伸進通道，避免與牆腳端面共面
   }
   // 城門通道：卵石地面、通道兩側的石牆面就是牆身
   box(G.x0, 0, G.gate0, G.x1, 0.15, G.gate1, 'cobble');

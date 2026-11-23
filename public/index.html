@@ -54,8 +54,8 @@
     <button id="tv-corner" class="tv-tool" title="子畫面換角落（C）"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M14 9h4v4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M18 9l-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
     <button id="tv-size" class="tv-tool" title="子畫面大小"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14v6h6M20 10V4h-6M4 20l6.5-6.5M20 4l-6.5 6.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <span class="tv-vol">
-      <button id="tv-ma" class="tv-tool" title="I 的聲音（只對你自己）"><i>🔊</i>I</button>
-      <button id="tv-mb" class="tv-tool" title="II 的聲音（只對你自己）"><i>🔊</i>II</button>
+      <span class="tv-vk"><button id="tv-ma" class="tv-tool" title="I 的聲音開關（只對你自己）"><i>🔊</i>I</button><input type="range" class="tv-vr" id="tv-va" min="0" max="100" step="1" value="100" aria-label="I 的音量" title="I 的音量（只對你自己）"><span class="tv-vn" id="tv-vna">100</span></span>
+      <span class="tv-vk"><button id="tv-mb" class="tv-tool" title="II 的聲音開關（只對你自己）"><i>🔊</i>II</button><input type="range" class="tv-vr" id="tv-vb" min="0" max="100" step="1" value="100" aria-label="II 的音量" title="II 的音量（只對你自己）"><span class="tv-vn" id="tv-vnb">100</span></span>
     </span>
   </div>
   <div id="joy" class="hidden"><div id="joy-knob"></div></div>
