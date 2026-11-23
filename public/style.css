@@ -472,8 +472,28 @@ body.tv-idle .tv-tag{opacity:0}
 .my-sub{font-size:12.5px;color:var(--muted)}
 .my-close{width:32px;height:32px;border-radius:50%;border:0;background:transparent;color:var(--muted);font-size:14px}
 .my-close:hover{background:rgba(255,255,255,.08);color:var(--ink)}
-.my-tabs{display:flex;gap:6px;padding:10px 14px;overflow-x:auto;scrollbar-width:none;flex:none}
+.my-tabs-wrap{position:relative;flex:none}
+.my-tabs{display:flex;gap:6px;padding:10px 14px 8px;overflow-x:auto;overflow-y:hidden;flex:none;scroll-behavior:smooth;overscroll-behavior-x:contain;scrollbar-width:none;cursor:grab}
 .my-tabs::-webkit-scrollbar{display:none}
+.my-tabs-wrap.dragging .my-tabs{cursor:grabbing;scroll-behavior:auto;user-select:none}
+/* 兩側漸層與箭頭：還有內容可以捲時才出現 */
+.my-tabs-wrap::before,.my-tabs-wrap::after{content:"";position:absolute;top:0;height:52px;width:44px;pointer-events:none;opacity:0;transition:opacity .2s;z-index:1}
+.my-tabs-wrap::before{left:0;background:linear-gradient(90deg,rgba(26,16,46,.98),rgba(26,16,46,0))}
+.my-tabs-wrap::after{right:0;background:linear-gradient(270deg,rgba(26,16,46,.98),rgba(26,16,46,0))}
+.my-tabs-wrap.can-l::before,.my-tabs-wrap.can-r::after{opacity:1}
+.my-tab-arrow{position:absolute;top:12px;z-index:2;width:28px;height:28px;border-radius:50%;padding:0;display:grid;place-items:center;
+  border:1px solid rgba(224,189,106,.5);background:rgba(20,12,38,.92);color:var(--gold);font:700 18px/1 "Cinzel",serif;opacity:0;pointer-events:none;transition:opacity .2s}
+.my-tab-arrow.prev{left:6px}.my-tab-arrow.next{right:6px}
+.my-tabs-wrap.can-l .my-tab-arrow.prev,.my-tabs-wrap.can-r .my-tab-arrow.next{opacity:1;pointer-events:auto}
+.my-tab-arrow:hover{background:rgba(60,40,90,.95)}
+body.touch .my-tab-arrow{display:none}
+/* 橫向捲軸：頻道太多時出現，拖曳金色滑塊或點軌道都能移動（電腦、手機一致） */
+.my-tabs-ind{display:none;position:relative;height:14px;margin:-2px 14px 4px;cursor:pointer;touch-action:none}
+.my-tabs-wrap.overflow .my-tabs-ind{display:block}
+.my-tabs-ind::before{content:"";position:absolute;left:0;right:0;top:5px;height:4px;border-radius:999px;background:rgba(255,255,255,.09)}
+.my-tabs-ind i{position:absolute;top:4px;height:6px;border-radius:999px;background:linear-gradient(90deg,#b8913f,#e0bd6a);box-shadow:0 0 8px rgba(224,189,106,.35);cursor:grab;transition:height .15s,top .15s}
+.my-tabs-ind:hover i,.my-tabs-wrap.thumb i{top:3px;height:8px;background:linear-gradient(90deg,#d4a748,#f6dc95)}
+.my-tabs-wrap.thumb .my-tabs-ind i{cursor:grabbing}
 .my-tabs button{flex:none;display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:999px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);color:var(--muted);font-size:13px;font-weight:700;white-space:nowrap}
 .my-tabs button small{font-weight:400;font-size:11px;opacity:.8}
 .my-tabs button[aria-selected=true]{color:#1b1206;border-color:transparent;background:linear-gradient(180deg,#f6dc95,#d4a748)}

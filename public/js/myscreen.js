@@ -45,7 +45,12 @@ export function initMyScreen({ screen, toast, isTouch, onFocus, wantSound, inHal
       <div><div class="my-kicker">MY SCREEN</div><h2>我的螢幕</h2><div class="my-sub">只有你看得到，其他人照常看大螢幕</div></div>
       <button type="button" class="my-close" aria-label="關閉">✕</button>
     </header>
-    <nav class="my-tabs" role="tablist" aria-label="頻道"></nav>
+    <div class="my-tabs-wrap">
+      <button type="button" class="my-tab-arrow prev" aria-label="往左捲動頻道" tabindex="-1">‹</button>
+      <nav class="my-tabs" role="tablist" aria-label="頻道"></nav>
+      <button type="button" class="my-tab-arrow next" aria-label="往右捲動頻道" tabindex="-1">›</button>
+      <div class="my-tabs-ind" aria-hidden="true"><i></i></div>
+    </div>
     <div class="my-body">
       <div class="my-lock hidden" role="status"></div>
       <div class="my-grid" role="list"></div>
@@ -100,7 +105,68 @@ export function initMyScreen({ screen, toast, isTouch, onFocus, wantSound, inHal
     const u = document.createElement('button'); u.type = 'button'; u.setAttribute('role', 'tab'); u.innerHTML = '<span>貼網址</span>';
     u.setAttribute('aria-selected', String(tab === 'url')); u.onclick = () => { tab = 'url'; renderTabs(); renderGrid(); };
     nav.append(u);
+    const sel = nav.querySelector('[aria-selected="true"]');
+    if (sel) { const l = sel.offsetLeft - 28, r = sel.offsetLeft + sel.offsetWidth + 28; if (l < nav.scrollLeft) nav.scrollLeft = l; else if (r > nav.scrollLeft + nav.clientWidth) nav.scrollLeft = r - nav.clientWidth; }
+    tabEdges();
   }
+  // 頻道列可以左右捲動：看得到的捲軸、兩側箭頭與漸層提示、滑鼠拖曳、滾輪橫捲
+  const tabsNav = $('.my-tabs'), tabsWrap = $('.my-tabs-wrap');
+  function tabEdges() {
+    const max = tabsNav.scrollWidth - tabsNav.clientWidth;
+    tabsWrap.classList.toggle('can-l', tabsNav.scrollLeft > 2);
+    tabsWrap.classList.toggle('can-r', tabsNav.scrollLeft < max - 2);
+    tabsWrap.classList.toggle('overflow', max > 2);
+    // 自己畫的橫向捲軸（瀏覽器原生捲軸在手機與部分系統上看不到）
+    const ind = tabsWrap.querySelector('.my-tabs-ind i'), w = tabsNav.clientWidth / Math.max(1, tabsNav.scrollWidth);
+    ind.style.width = (w * 100).toFixed(2) + '%'; ind.style.left = (max > 0 ? tabsNav.scrollLeft / max * (1 - w) * 100 : 0).toFixed(2) + '%';
+  }
+  tabsNav.addEventListener('scroll', tabEdges, { passive: true });
+  addEventListener('resize', tabEdges);
+  const nudge = (dir) => { tabsNav.style.scrollBehavior = ''; tabsNav.scrollBy({ left: dir * tabsNav.clientWidth * 0.7, behavior: 'smooth' }); };
+  $('.my-tab-arrow.prev').onclick = () => nudge(-1);
+  $('.my-tab-arrow.next').onclick = () => nudge(1);
+  tabsNav.addEventListener('wheel', (e) => {
+    if (Math.abs(e.deltaY) <= Math.abs(e.deltaX) || tabsNav.scrollWidth <= tabsNav.clientWidth) return;
+    e.preventDefault(); tabsNav.scrollLeft += e.deltaY;
+  }, { passive: false });
+  let drag = null;
+  tabsNav.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'mouse' || e.button !== 0) return; // 觸控用原生滑動
+    drag = { x: e.clientX, left: tabsNav.scrollLeft, moved: false, id: e.pointerId };
+  });
+  tabsNav.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dx = e.clientX - drag.x;
+    if (!drag.moved && Math.abs(dx) > 5) { drag.moved = true; tabsNav.setPointerCapture(e.pointerId); tabsWrap.classList.add('dragging'); }
+    if (drag.moved) tabsNav.scrollLeft = drag.left - dx;
+  });
+  const endDrag = (e) => {
+    if (!drag) return;
+    if (drag.moved) { const swallow = (ev) => { ev.stopPropagation(); ev.preventDefault(); }; tabsNav.addEventListener('click', swallow, { capture: true, once: true }); setTimeout(() => tabsNav.removeEventListener('click', swallow, true), 0); }
+    tabsWrap.classList.remove('dragging'); drag = null;
+  };
+  tabsNav.addEventListener('pointerup', endDrag); tabsNav.addEventListener('pointercancel', endDrag);
+  // 拖曳下方金色滑塊或點軌道
+  const indEl = tabsWrap.querySelector('.my-tabs-ind');
+  let thumb = null;
+  const ratio = () => tabsNav.clientWidth / Math.max(1, tabsNav.scrollWidth);
+  indEl.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    const r = indEl.getBoundingClientRect(), max = tabsNav.scrollWidth - tabsNav.clientWidth, w = ratio() * r.width;
+    if (e.target.tagName !== 'I') { // 點軌道：滑塊中心跳到點的位置
+      tabsNav.style.scrollBehavior = 'auto';
+      tabsNav.scrollLeft = Math.max(0, Math.min(1, (e.clientX - r.left - w / 2) / Math.max(1, r.width - w))) * max;
+    }
+    thumb = { x: e.clientX, left: tabsNav.scrollLeft, scale: max / Math.max(1, r.width - w), id: e.pointerId };
+    indEl.setPointerCapture(e.pointerId); tabsWrap.classList.add('thumb');
+  });
+  indEl.addEventListener('pointermove', (e) => {
+    if (!thumb || e.pointerId !== thumb.id) return;
+    tabsNav.style.scrollBehavior = 'auto';
+    tabsNav.scrollLeft = thumb.left + (e.clientX - thumb.x) * thumb.scale;
+  });
+  const endThumb = () => { thumb = null; tabsWrap.classList.remove('thumb'); tabsNav.style.scrollBehavior = ''; };
+  indEl.addEventListener('pointerup', endThumb); indEl.addEventListener('pointercancel', endThumb);
   function renderGrid() {
     const grid = $('.my-grid'), form = $('.my-url');
     form.classList.toggle('hidden', tab !== 'url'); grid.classList.toggle('hidden', tab === 'url');
